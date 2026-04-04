@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trading Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d0d;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      padding: 24px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+      color: #fff;
+    }
+
+    h1 span { color: #4ade80; }
+
+    /* KPI CARDS */
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .kpi {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .kpi .label {
+      font-size: 0.72rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .kpi .value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .kpi .value.green { color: #4ade80; }
+    .kpi .value.red   { color: #f87171; }
+
+    /* CHARTS GRID */
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+      gap: 20px;
+    }
+
+    .chart-card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 20px;
+    }
+
+    .chart-card.wide {
+      grid-column: 1 / -1;
+    }
+
+    .chart-card h2 {
+      font-size: 0.85rem;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 14px;
+    }
+
+    canvas { width: 100% !important; }
+
+    #error {
+      background: #2a1010;
+      border: 1px solid #f87171;
+      color: #f87171;
+      padding: 16px;
+      border-radius: 8px;
+      display: none;
+      margin-bottom: 20px;
+    }
+
+    #loading {
+      color: #888;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 Trading Dashboard — <span>Abril 2026</span></h1>
+  <div id="error"></div>
+  <div id="loading">Loading data...</div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="charts">
+    <div class="chart-card wide">
+      <h2>Cumulative P&L</h2>
+      <canvas id="chartCumPnL" height="80"></canvas>
+    </div>
+    <div class="chart-card">
+      <h2>Win / Loss / Break Even</h2>
+      <canvas id="chartOutcome" height="220"></canvas>
+    </div>
+    <div class="chart-card">
+      <h2>P&L by Session</h2>
+      <canvas id="chartSession" height="220"></canvas>
+    </div>
+    <div class="chart-card">
+      <h2>P&L by Day</h2>
+      <canvas id="chartDay" height="220"></canvas>
+    </div>
+    <div class="chart-card">
+      <h2>P&L by Position</h2>
+      <canvas id="chartPosition" height="220"></canvas>
+    </div>
+    <div class="chart-card wide">
+      <h2>P&L by Entry Model</h2>
+      <canvas id="chartModel" height="80"></canvas>
+    </div>
+    <div class="chart-card wide">
+      <h2>P&L by Setup Quality</h2>
+      <canvas id="chartQuality" height="80"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const COLORS = {
+      green:  '#4ade80',
+      red:    '#f87171',
+      blue:   '#60a5fa',
+      yellow: '#fbbf24',
+      purple: '#a78bfa',
+      gray:   '#6b7280',
+    };
+
+    const chartDefaults = {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#ccc', font: { size: 12 } } } },
+      scales: {
+        x: { ticks: { color: '#888' }, grid: { color: '#2a2a2a' } },
+        y: { ticks: { color: '#888' }, grid: { color: '#2a2a2a' } },
+      },
+    };
+
+    function barColor(values) {
+      return values.map(v => v >= 0 ? COLORS.green : COLORS.red);
+    }
+
+    function kpi(label, value, cls = '') {
+      return `<div class="kpi">
+        <div class="label">${label}</div>
+        <div class="value ${cls}">${value}</div>
+      </div>`;
+    }
+
+    function fmt(n) {
+      return (n >= 0 ? '+' : '') + '$' + n.toFixed(2);
+    }
+
+    async function load() {
+      const loadingEl = document.getElementById('loading');
+      const errorEl   = document.getElementById('error');
+      try {
+        const res  = await fetch('/api/trades');
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        loadingEl.style.display = 'none';
+
+        const { stats, cumulativePnL, bySession, byEntryModel, byQuality, byDay, byPosition } = data;
+
+        // KPIs
+        document.getElementById('kpis').innerHTML = [
+          kpi('Total Trades', stats.totalTrades),
+          kpi('Win Rate', stats.winRate + '%', stats.winRate >= 50 ? 'green' : 'red'),
+          kpi('Total P&L', fmt(stats.totalPnL), stats.totalPnL >= 0 ? 'green' : 'red'),
+          kpi('Avg Win', fmt(stats.avgWin), 'green'),
+          kpi('Avg Loss', fmt(stats.avgLoss), 'red'),
+          kpi('Best Trade', fmt(stats.bestTrade), 'green'),
+          kpi('Worst Trade', fmt(stats.worstTrade), 'red'),
+          kpi('Wins', stats.wins, 'green'),
+          kpi('Losses', stats.losses, 'red'),
+          kpi('Break Evens', stats.breakEvens),
+        ].join('');
+
+        // Cumulative P&L line chart
+        new Chart(document.getElementById('chartCumPnL'), {
+          type: 'line',
+          data: {
+            labels: cumulativePnL.map(p => p.trade || p.date),
+            datasets: [{
+              label: 'Cumulative P&L',
+              data: cumulativePnL.map(p => p.cumPnL),
+              borderColor: COLORS.blue,
+              backgroundColor: 'rgba(96,165,250,0.1)',
+              fill: true,
+              tension: 0.3,
+              pointRadius: 3,
+            }],
+          },
+          options: chartDefaults,
+        });
+
+        // Win/Loss/BE doughnut
+        new Chart(document.getElementById('chartOutcome'), {
+          type: 'doughnut',
+          data: {
+            labels: ['Wins', 'Losses', 'Break Even'],
+            datasets: [{
+              data: [stats.wins, stats.losses, stats.breakEvens],
+              backgroundColor: [COLORS.green, COLORS.red, COLORS.gray],
+              borderWidth: 0,
+            }],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { labels: { color: '#ccc' } } },
+          },
+        });
+
+        // By Session bar chart
+        const sessions = Object.entries(bySession);
+        new Chart(document.getElementById('chartSession'), {
+          type: 'bar',
+          data: {
+            labels: sessions.map(([k]) => k),
+            datasets: [{
+              label: 'Net P&L',
+              data: sessions.map(([, v]) => v.pnl),
+              backgroundColor: barColor(sessions.map(([, v]) => v.pnl)),
+            }],
+          },
+          options: chartDefaults,
+        });
+
+        // By Day bar chart
+        const dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        const days = dayOrder.filter(d => byDay[d]).map(d => [d, byDay[d]]);
+        new Chart(document.getElementById('chartDay'), {
+          type: 'bar',
+          data: {
+            labels: days.map(([k]) => k),
+            datasets: [{
+              label: 'Net P&L',
+              data: days.map(([, v]) => v.pnl),
+              backgroundColor: barColor(days.map(([, v]) => v.pnl)),
+            }],
+          },
+          options: chartDefaults,
+        });
+
+        // By Position bar chart
+        const positions = Object.entries(byPosition);
+        new Chart(document.getElementById('chartPosition'), {
+          type: 'bar',
+          data: {
+            labels: positions.map(([k]) => k),
+            datasets: [{
+              label: 'Net P&L',
+              data: positions.map(([, v]) => v.pnl),
+              backgroundColor: barColor(positions.map(([, v]) => v.pnl)),
+            }],
+          },
+          options: chartDefaults,
+        });
+
+        // By Entry Model
+        const models = Object.entries(byEntryModel).sort((a, b) => b[1].pnl - a[1].pnl);
+        new Chart(document.getElementById('chartModel'), {
+          type: 'bar',
+          data: {
+            labels: models.map(([k]) => k),
+            datasets: [{
+              label: 'Net P&L',
+              data: models.map(([, v]) => v.pnl),
+              backgroundColor: barColor(models.map(([, v]) => v.pnl)),
+            }],
+          },
+          options: chartDefaults,
+        });
+
+        // By Setup Quality
+        const qualityOrder = ['⭐', '⭐⭐', '⭐⭐⭐'];
+        const quality = qualityOrder.filter(q => byQuality[q]).map(q => [q, byQuality[q]]);
+        new Chart(document.getElementById('chartQuality'), {
+          type: 'bar',
+          data: {
+            labels: quality.map(([k]) => k),
+            datasets: [{
+              label: 'Net P&L',
+              data: quality.map(([, v]) => v.pnl),
+              backgroundColor: barColor(quality.map(([, v]) => v.pnl)),
+            }],
+          },
+          options: chartDefaults,
+        });
+
+      } catch (err) {
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'block';
+        errorEl.textContent = '❌ Error: ' + err.message;
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>
