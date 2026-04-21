@@ -1,10 +1,19 @@
 const crypto = require("crypto");
 
-const BASE = "https://fapi.binance.com";
+// Candidate base URLs tried in order until one responds without 451.
+// Paths are always /fapi/v1/... or /fapi/v2/...
+const BASE_URLS = [
+  "https://fapi1.binance.com",  // primary (accessible from Vercel)
+  "https://fapi2.binance.com",  // fallback 1
+  "https://fapi3.binance.com",  // fallback 2
+  "https://api1.binance.com",   // fallback 3
+  "https://fapi.binance.com",   // fallback 4 (geo-blocked on some Vercel regions)
+];
 
 // KEY and SECRET are read inside the handler (not at module load time)
 // so that missing env vars return a proper error instead of crashing crypto.
 let KEY, SECRET;
+let workingBase = null; // cached after first successful probe
 
 const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
@@ -14,15 +23,37 @@ function sign(qs) {
   return crypto.createHmac("sha256", SECRET).update(qs).digest("hex");
 }
 
+// Try each base URL in order; skip those that return HTTP 451 (geo-blocked).
+// Caches the first working base for subsequent calls within the same process.
 async function bfetch(path, params = {}) {
-  const p   = { ...params, timestamp: Date.now() };
-  const qs  = new URLSearchParams(p).toString();
-  const url = `${BASE}${path}?${qs}&signature=${sign(qs)}`;
-  const res = await fetch(url, { headers: { "X-MBX-APIKEY": KEY } });
-  const json = await res.json();
-  if (!Array.isArray(json) && json.code < 0)
-    throw new Error(`Binance ${json.code}: ${json.msg}`);
-  return json;
+  const p  = { ...params, timestamp: Date.now() };
+  const qs = new URLSearchParams(p).toString();
+  const sig = sign(qs);
+  const headers = { "X-MBX-APIKEY": KEY };
+
+  const bases = workingBase ? [workingBase, ...BASE_URLS.filter(b => b !== workingBase)] : BASE_URLS;
+
+  let lastError = null;
+  for (const base of bases) {
+    const url = `${base}${path}?${qs}&signature=${sig}`;
+    let res;
+    try {
+      res = await fetch(url, { headers });
+    } catch (e) {
+      lastError = e;
+      continue;
+    }
+    if (res.status === 451) { lastError = new Error(`451 geo-blocked: ${base}`); continue; }
+
+    const json = await res.json();
+    if (!Array.isArray(json) && json.code < 0)
+      throw new Error(`Binance ${json.code}: ${json.msg}`);
+
+    workingBase = base; // cache for next calls
+    return json;
+  }
+
+  throw lastError || new Error("All Binance base URLs returned 451 (geo-restricted).");
 }
 
 // ── Paginated fetchers ────────────────────────────────────────────────────────
