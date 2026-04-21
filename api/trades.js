@@ -1,89 +1,88 @@
 const crypto = require("crypto");
 
 // Candidate base URLs tried in order until one responds without 451.
-// Paths are always /fapi/v1/... or /fapi/v2/...
 const BASE_URLS = [
-  "https://fapi1.binance.com",  // primary (accessible from Vercel)
-  "https://fapi2.binance.com",  // fallback 1
-  "https://fapi3.binance.com",  // fallback 2
-  "https://api1.binance.com",   // fallback 3
-  "https://fapi.binance.com",   // fallback 4 (geo-blocked on some Vercel regions)
+  "https://fapi1.binance.com",
+  "https://fapi2.binance.com",
+  "https://fapi3.binance.com",
+  "https://api1.binance.com",
+  "https://fapi.binance.com",
 ];
 
-// KEY and SECRET are read inside the handler (not at module load time)
-// so that missing env vars return a proper error instead of crashing crypto.
+// Read at handler time, not module load time.
 let KEY, SECRET;
-let workingBase = null; // cached after first successful probe
+let workingBase = null;
 
 const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-// ── Binance request signing ───────────────────────────────────────────────────
+// ── Signing ───────────────────────────────────────────────────────────────────
 
 function sign(qs) {
   return crypto.createHmac("sha256", SECRET).update(qs).digest("hex");
 }
 
-// Try each base URL in order; skip those that return HTTP 451 (geo-blocked).
-// Caches the first working base for subsequent calls within the same process.
+// ── Core fetch with fallback + safe JSON parse ────────────────────────────────
+
 async function bfetch(path, params = {}) {
-  const p  = { ...params, timestamp: Date.now() };
-  const qs = new URLSearchParams(p).toString();
+  const p   = { ...params, timestamp: Date.now() };
+  const qs  = new URLSearchParams(p).toString();
   const sig = sign(qs);
   const headers = { "X-MBX-APIKEY": KEY };
 
-  const bases = workingBase ? [workingBase, ...BASE_URLS.filter(b => b !== workingBase)] : BASE_URLS;
+  const bases = workingBase
+    ? [workingBase, ...BASE_URLS.filter(b => b !== workingBase)]
+    : BASE_URLS;
 
   let lastError = null;
   for (const base of bases) {
     const url = `${base}${path}?${qs}&signature=${sig}`;
     let res;
-    try {
-      res = await fetch(url, { headers });
-    } catch (e) {
-      lastError = e;
+    try { res = await fetch(url, { headers }); }
+    catch (e) { lastError = e; continue; }
+
+    if (res.status === 451) {
+      lastError = new Error(`451 geo-blocked: ${base}`);
       continue;
     }
-    if (res.status === 451) { lastError = new Error(`451 geo-blocked: ${base}`); continue; }
 
-    const json = await res.json();
-    if (!Array.isArray(json) && json.code < 0)
+    // Safe parse — guard against empty body (202) or non-JSON responses
+    const text = await res.text();
+    if (!text || !text.trim()) { workingBase = base; return []; }
+
+    let json;
+    try { json = JSON.parse(text); }
+    catch { workingBase = base; return []; }
+
+    if (!Array.isArray(json) && typeof json.code === "number" && json.code < 0)
       throw new Error(`Binance ${json.code}: ${json.msg}`);
 
-    workingBase = base; // cache for next calls
+    workingBase = base;
     return json;
   }
 
-  throw lastError || new Error("All Binance base URLs returned 451 (geo-restricted).");
+  throw lastError || new Error("All Binance base URLs are unreachable.");
 }
 
-// ── Paginated fetchers ────────────────────────────────────────────────────────
+// ── Symbol discovery ──────────────────────────────────────────────────────────
+// Priority: BINANCE_SYMBOLS env var → /fapi/v2/account positions
 
-// GET /fapi/v1/income — all REALIZED_PNL entries, no symbol required.
-// Paginates backwards from now until no more data.
-async function fetchAllIncome() {
-  const TWO_YEARS = 2 * 365 * 24 * 60 * 60 * 1000;
-  const startTime = Date.now() - TWO_YEARS;
-  const all = [];
-  let endTime = Date.now();
-
-  while (true) {
-    const batch = await bfetch("/fapi/v1/income", {
-      incomeType: "REALIZED_PNL",
-      startTime,
-      endTime,
-      limit: 1000,
-    });
-    if (!Array.isArray(batch) || batch.length === 0) break;
-    all.push(...batch);
-    if (batch.length < 1000) break;
-    endTime = Math.min(...batch.map((b) => Number(b.time))) - 1;
-    if (endTime <= startTime) break;
+async function discoverSymbols() {
+  const envSymbols = process.env.BINANCE_SYMBOLS;
+  if (envSymbols) {
+    return envSymbols.split(",").map(s => s.trim()).filter(Boolean);
   }
 
-  return all.sort((a, b) => Number(a.time) - Number(b.time));
+  const account = await bfetch("/fapi/v2/account", {});
+  if (!account || !Array.isArray(account.positions)) return [];
+
+  // Keep only symbols that have ever had activity (updateTime > 0)
+  return account.positions
+    .filter(p => Number(p.updateTime) > 0)
+    .map(p => p.symbol);
 }
 
-// GET /fapi/v1/userTrades — all fills for a given symbol.
+// ── Paginated userTrades fetch ────────────────────────────────────────────────
+
 async function fetchUserTrades(symbol) {
   const all = [];
   let fromId;
@@ -101,44 +100,79 @@ async function fetchUserTrades(symbol) {
   return all;
 }
 
-// GET /fapi/v1/allOrders — full order history for a given symbol.
-async function fetchAllOrders(symbol) {
-  const all = [];
-  let orderId;
+// ── Position inference ────────────────────────────────────────────────────────
+// Hedge mode:  positionSide is "LONG" or "SHORT" directly.
+// One-way mode: positionSide is "BOTH".
+//   Closing fill side === "SELL" → was a Long position.
+//   Closing fill side === "BUY"  → was a Short position.
 
-  while (true) {
-    const params = { symbol, limit: 1000 };
-    if (orderId !== undefined) params.orderId = orderId;
-    const batch = await bfetch("/fapi/v1/allOrders", params);
-    if (!Array.isArray(batch) || batch.length === 0) break;
-    all.push(...batch);
-    if (batch.length < 1000) break;
-    orderId = batch[batch.length - 1].orderId + 1;
+function inferPosition(fill) {
+  if (fill.positionSide === "LONG")  return "Long";
+  if (fill.positionSide === "SHORT") return "Short";
+  return fill.side === "SELL" ? "Long" : "Short";
+}
+
+// ── Build trades from raw fills ───────────────────────────────────────────────
+// Each userTrade fill has realizedPnl. Opening fills have realizedPnl === "0";
+// closing fills have a non-zero value. We group closing fills by orderId so
+// partially-filled close orders count as one trade.
+
+function buildTrades(allFills, symbol) {
+  // Keep only closing fills
+  const closing = allFills.filter(f => parseFloat(f.realizedPnl) !== 0);
+
+  // Group by orderId
+  const orderMap = new Map();
+  for (const fill of closing) {
+    const key = String(fill.orderId);
+    if (!orderMap.has(key)) orderMap.set(key, []);
+    orderMap.get(key).push(fill);
   }
 
-  return all;
+  const trades = [];
+  for (const [, fills] of orderMap) {
+    // Sort fills by time so the latest is used for the date
+    fills.sort((a, b) => Number(a.time) - Number(b.time));
+    const last = fills[fills.length - 1];
+
+    const grossPnL = fills.reduce((s, f) => s + parseFloat(f.realizedPnl), 0);
+    const commUSDT = fills
+      .filter(f => f.commissionAsset === "USDT")
+      .reduce((s, f) => s + Math.abs(parseFloat(f.commission)), 0);
+    const netPnL = parseFloat((grossPnL - commUSDT).toFixed(2));
+
+    const d = new Date(Number(last.time));
+
+    trades.push({
+      number:       String(last.orderId),
+      openTrade:    d.toISOString().split("T")[0],
+      day:          DAY_NAMES[d.getDay()],
+      assets:       symbol,
+      position:     inferPosition(last),
+      exchange:     "Binance Futures",
+      session:      "",
+      tf:           "",
+      entryModel:   [],
+      setupQuality: "",
+      sl:           0,
+      rr:           "",
+      profit:       netPnL > 0,
+      breakEven:    Math.abs(netPnL) < 0.000001,
+      loss:         netPnL < 0,
+      netPnL,
+    });
+  }
+
+  return trades;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-// Infer Long/Short from userTrade fields.
-// Hedge mode: positionSide is "LONG" or "SHORT" directly.
-// One-way mode: positionSide is "BOTH", use closing side (BUY = closing short, SELL = closing long).
-function inferPosition(ut) {
-  if (!ut) return "";
-  if (ut.positionSide === "LONG")  return "Long";
-  if (ut.positionSide === "SHORT") return "Short";
-  // One-way: the income entry represents a close, so the side is the closing side.
-  // BUY closes a short position → the position was Short.
-  // SELL closes a long position → the position was Long.
-  return ut.side === "SELL" ? "Long" : "Short";
-}
+// ── Stats helpers ─────────────────────────────────────────────────────────────
 
 function calcPeriodStats(ts) {
   const total      = ts.length;
-  const wins       = ts.filter((t) => t.profit).length;
-  const losses     = ts.filter((t) => t.loss).length;
-  const breakEvens = ts.filter((t) => t.breakEven).length;
+  const wins       = ts.filter(t => t.profit).length;
+  const losses     = ts.filter(t => t.loss).length;
+  const breakEvens = ts.filter(t => t.breakEven).length;
   const winRate    = total > 0 ? parseFloat(((wins / total) * 100).toFixed(1)) : 0;
   const totalPnL   = parseFloat(ts.reduce((s, t) => s + t.netPnL, 0).toFixed(2));
   return { total, wins, losses, breakEvens, winRate, totalPnL, avgRR: 0 };
@@ -146,21 +180,16 @@ function calcPeriodStats(ts) {
 
 function calcPositionDetail(ts) {
   const total      = ts.length;
-  const winTrades  = ts.filter((t) => t.profit);
-  const lossTrades = ts.filter((t) => t.loss);
-  const beTrades   = ts.filter((t) => t.breakEven);
+  const winTrades  = ts.filter(t => t.profit);
+  const lossTrades = ts.filter(t => t.loss);
+  const beTrades   = ts.filter(t => t.breakEven);
   const winRate    = total > 0 ? parseFloat(((winTrades.length / total) * 100).toFixed(1)) : 0;
   const totalPnL   = parseFloat(ts.reduce((s, t) => s + t.netPnL, 0).toFixed(2));
   const avgWin     = winTrades.length
-    ? parseFloat((winTrades.reduce((s, t) => s + t.netPnL, 0) / winTrades.length).toFixed(2))
-    : 0;
+    ? parseFloat((winTrades.reduce((s, t)  => s + t.netPnL, 0) / winTrades.length).toFixed(2))  : 0;
   const avgLoss    = lossTrades.length
-    ? parseFloat((lossTrades.reduce((s, t) => s + t.netPnL, 0) / lossTrades.length).toFixed(2))
-    : 0;
-  return {
-    total, wins: winTrades.length, losses: lossTrades.length,
-    breakEvens: beTrades.length, winRate, totalPnL, avgWin, avgLoss,
-  };
+    ? parseFloat((lossTrades.reduce((s, t) => s + t.netPnL, 0) / lossTrades.length).toFixed(2)) : 0;
+  return { total, wins: winTrades.length, losses: lossTrades.length, breakEvens: beTrades.length, winRate, totalPnL, avgWin, avgLoss };
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -170,14 +199,13 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET");
   res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=60");
 
-  // Validate env vars before any crypto or fetch operations
+  // Validate env vars before any crypto operations
   const missing = [];
   if (!process.env.BINANCE_API_KEY)    missing.push("BINANCE_API_KEY");
   if (!process.env.BINANCE_API_SECRET) missing.push("BINANCE_API_SECRET");
   if (missing.length > 0) {
     return res.status(500).json({
-      error: `Missing environment variable(s): ${missing.join(", ")}. ` +
-             `Set them in Vercel → Project Settings → Environment Variables.`,
+      error: `Missing environment variable(s): ${missing.join(", ")}. Set them in Vercel → Project Settings → Environment Variables.`,
       env: {
         BINANCE_API_KEY:    process.env.BINANCE_API_KEY    ? "✓ set" : "✗ missing",
         BINANCE_API_SECRET: process.env.BINANCE_API_SECRET ? "✓ set" : "✗ missing",
@@ -185,97 +213,58 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // Assign after validation so crypto never receives undefined
   KEY    = process.env.BINANCE_API_KEY;
   SECRET = process.env.BINANCE_API_SECRET;
 
   try {
-    // 1. Fetch all realized PnL income entries (symbol discovery + PnL source)
-    const income  = await fetchAllIncome();
-    const symbols = [...new Set(income.map((i) => i.symbol).filter(Boolean))];
-
-    // 2. Fetch userTrades + allOrders per symbol in parallel batches of 3
-    //    to stay within Binance rate limits.
-    const tradeMap = new Map(); // income.tradeId → userTrade
-    const orderMap = new Map(); // orderId → order (available for future use)
-
-    for (let i = 0; i < symbols.length; i += 3) {
-      const chunk = symbols.slice(i, i + 3);
-      await Promise.all(
-        chunk.map(async (symbol) => {
-          const [uts, orders] = await Promise.all([
-            fetchUserTrades(symbol),
-            fetchAllOrders(symbol),
-          ]);
-          uts.forEach((t)    => tradeMap.set(String(t.id), t));
-          orders.forEach((o) => orderMap.set(String(o.orderId), o));
-        })
-      );
+    // 1. Discover which symbols to query
+    const symbols = await discoverSymbols();
+    if (symbols.length === 0) {
+      return res.status(200).json({
+        error: "No symbols found. Set BINANCE_SYMBOLS env var (e.g. 'BTCUSDT,ETHUSDT') in Vercel.",
+        trades: [], stats: {}, equityCurve: [], byPeriod: {}, symbolSummary: { count: 0 }, positionBreakdown: {},
+      });
     }
 
-    // 3. Build unified trade objects
-    //    netPnL = gross realizedPnl (from income) − trading commission
-    //    Commission is subtracted only when denominated in USDT to avoid
-    //    cross-asset conversion issues (e.g. BNB fee rebates).
-    const trades = income.map((inc, idx) => {
-      const ut        = tradeMap.get(String(inc.tradeId));
-      const ts        = Number(inc.time);
-      const d         = new Date(ts);
-      const gross     = parseFloat(inc.income);
-      const commUSDT  = ut && ut.commissionAsset === "USDT"
-        ? parseFloat(ut.commission)
-        : 0;
-      const netPnL    = parseFloat((gross - Math.abs(commUSDT)).toFixed(2));
+    // 2. Fetch userTrades for each symbol in parallel batches of 4
+    const allFills = [];
+    for (let i = 0; i < symbols.length; i += 4) {
+      const chunk = symbols.slice(i, i + 4);
+      const results = await Promise.all(
+        chunk.map(symbol => fetchUserTrades(symbol).then(fills => ({ symbol, fills })))
+      );
+      for (const { symbol, fills } of results) {
+        allFills.push(...buildTrades(fills, symbol));
+      }
+    }
 
-      return {
-        number:       String(inc.tradeId || idx + 1),
-        openTrade:    d.toISOString().split("T")[0],
-        day:          DAY_NAMES[d.getDay()],
-        assets:       inc.symbol || "",
-        position:     inferPosition(ut),
-        exchange:     "Binance Futures",
-        session:      "",
-        tf:           "",
-        entryModel:   [],
-        setupQuality: "",
-        sl:           0,
-        rr:           "",
-        profit:       netPnL > 0,
-        breakEven:    Math.abs(netPnL) < 0.000001,
-        loss:         netPnL < 0,
-        netPnL,
-      };
-    });
+    // 3. Sort all trades chronologically
+    const trades = allFills.sort((a, b) => a.openTrade.localeCompare(b.openTrade));
 
     // 4. Global stats
     const totalTrades = trades.length;
-    const wins        = trades.filter((t) => t.profit).length;
-    const losses      = trades.filter((t) => t.loss).length;
-    const breakEvens  = trades.filter((t) => t.breakEven).length;
+    const wins        = trades.filter(t => t.profit).length;
+    const losses      = trades.filter(t => t.loss).length;
+    const breakEvens  = trades.filter(t => t.breakEven).length;
     const winRate     = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : 0;
     const totalPnL    = trades.reduce((s, t) => s + t.netPnL, 0);
     const avgWin      = wins > 0
-      ? trades.filter((t) => t.profit).reduce((s, t) => s + t.netPnL, 0) / wins
-      : 0;
+      ? trades.filter(t => t.profit).reduce((s, t) => s + t.netPnL, 0) / wins : 0;
     const avgLoss     = losses > 0
-      ? trades.filter((t) => t.loss).reduce((s, t) => s + t.netPnL, 0) / losses
-      : 0;
-    const bestTrade   = trades.length > 0 ? Math.max(...trades.map((t) => t.netPnL)) : 0;
-    const worstTrade  = trades.length > 0 ? Math.min(...trades.map((t) => t.netPnL)) : 0;
+      ? trades.filter(t => t.loss).reduce((s, t) => s + t.netPnL, 0) / losses : 0;
+    const bestTrade   = trades.length > 0 ? Math.max(...trades.map(t => t.netPnL)) : 0;
+    const worstTrade  = trades.length > 0 ? Math.min(...trades.map(t => t.netPnL)) : 0;
 
-    // 5. Cumulative P&L (per trade)
+    // 5. Cumulative P&L per trade
     let cum = 0;
-    const cumulativePnL = trades.map((t) => {
+    const cumulativePnL = trades.map(t => {
       cum += t.netPnL;
       return { trade: t.number, date: t.openTrade, cumPnL: parseFloat(cum.toFixed(2)) };
     });
 
     // 6. Daily equity curve
     const byDate = {};
-    trades.forEach((t) => {
-      if (!t.openTrade) return;
-      byDate[t.openTrade] = (byDate[t.openTrade] || 0) + t.netPnL;
-    });
+    trades.forEach(t => { byDate[t.openTrade] = (byDate[t.openTrade] || 0) + t.netPnL; });
     let running = 0;
     const equityCurve = Object.entries(byDate)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -293,15 +282,15 @@ module.exports = async function handler(req, res) {
     const soy = new Date(now.getFullYear(), 0, 1);
 
     const byPeriod = {
-      thisWeek:  calcPeriodStats(trades.filter((t) => t.openTrade && new Date(t.openTrade) >= sow)),
-      thisMonth: calcPeriodStats(trades.filter((t) => t.openTrade && new Date(t.openTrade) >= som)),
-      thisYear:  calcPeriodStats(trades.filter((t) => t.openTrade && new Date(t.openTrade) >= soy)),
+      thisWeek:  calcPeriodStats(trades.filter(t => t.openTrade && new Date(t.openTrade) >= sow)),
+      thisMonth: calcPeriodStats(trades.filter(t => t.openTrade && new Date(t.openTrade) >= som)),
+      thisYear:  calcPeriodStats(trades.filter(t => t.openTrade && new Date(t.openTrade) >= soy)),
       allTime:   calcPeriodStats(trades),
     };
 
     // 8. Monthly stats
     const monthlyMap = {};
-    trades.forEach((t) => {
+    trades.forEach(t => {
       if (!t.openTrade) return;
       const d   = new Date(t.openTrade);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -314,7 +303,7 @@ module.exports = async function handler(req, res) {
 
     // 9. Symbol summary
     const byAsset = {};
-    trades.forEach((t) => {
+    trades.forEach(t => {
       if (!t.assets) return;
       if (!byAsset[t.assets]) byAsset[t.assets] = { pnl: 0, count: 0 };
       byAsset[t.assets].pnl   += t.netPnL;
@@ -335,8 +324,8 @@ module.exports = async function handler(req, res) {
     };
 
     // 10. Position breakdown
-    const longTrades  = trades.filter((t) => t.position && t.position.toLowerCase().includes("long"));
-    const shortTrades = trades.filter((t) => t.position && t.position.toLowerCase().includes("short"));
+    const longTrades  = trades.filter(t => t.position && t.position.toLowerCase().includes("long"));
+    const shortTrades = trades.filter(t => t.position && t.position.toLowerCase().includes("short"));
     const positionBreakdown = {
       long:       calcPositionDetail(longTrades),
       short:      calcPositionDetail(shortTrades),
@@ -372,5 +361,4 @@ module.exports = async function handler(req, res) {
   }
 };
 
-// Extend Vercel function timeout to 60s to accommodate multi-symbol fetching
 module.exports.config = { maxDuration: 60 };

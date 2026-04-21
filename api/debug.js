@@ -16,14 +16,15 @@ async function probe(key, secret, base, path, params = {}) {
   const p   = { ...params, timestamp: Date.now() };
   const qs  = new URLSearchParams(p).toString();
   const url = `${base}${path}?${qs}&signature=${sign(secret, qs)}`;
-  let res, text, json;
   try {
-    res  = await fetch(url, { headers: { "X-MBX-APIKEY": key } });
-    text = await res.text();
-    try { json = JSON.parse(text); } catch { json = text; }
-    return { status: res.status, body: json };
+    const res  = await fetch(url, { headers: { "X-MBX-APIKEY": key } });
+    const text = await res.text();
+    let body;
+    try { body = text.trim() ? JSON.parse(text) : "(empty body)"; }
+    catch { body = text || "(empty body)"; }
+    return { httpStatus: res.status, bodyType: Array.isArray(body) ? "array" : typeof body, bodyLength: Array.isArray(body) ? body.length : undefined, body };
   } catch (e) {
-    return { status: "fetch_error", error: e.message };
+    return { httpStatus: "fetch_error", error: e.message };
   }
 }
 
@@ -39,8 +40,6 @@ module.exports = async function handler(req, res) {
       BINANCE_API_KEY:    KEY    ? `✓ set (length ${KEY.length})`    : "✗ missing",
       BINANCE_API_SECRET: SECRET ? `✓ set (length ${SECRET.length})` : "✗ missing",
     },
-    baseUrlProbes: {},
-    incomeTest: null,
   };
 
   if (!KEY || !SECRET) {
@@ -48,39 +47,48 @@ module.exports = async function handler(req, res) {
     return res.status(200).json(report);
   }
 
-  // Probe each base URL with /fapi/v1/userTrades?symbol=BTCUSDT&limit=1
-  // to find which ones are reachable from Vercel.
-  await Promise.all(
-    BASE_URLS.map(async (base) => {
-      const result = await probe(KEY, SECRET, base, "/fapi/v1/userTrades", {
-        symbol: "BTCUSDT",
-        limit: 1,
-      });
-      report.baseUrlProbes[base] = {
-        httpStatus: result.status,
-        reachable:  result.status !== 451 && result.status !== "fetch_error",
-        body:       result.body,
-      };
-    })
-  );
-
-  // Find first working base and run the income test on it
-  const working = BASE_URLS.find(
-    (b) => report.baseUrlProbes[b].reachable
-  );
-
-  if (working) {
-    report.workingBase = working;
-    report.incomeTest  = await probe(KEY, SECRET, working, "/fapi/v1/income", {
-      incomeType: "REALIZED_PNL",
-      limit: 5,
-    });
-  } else {
-    report.workingBase = null;
-    report.error = "All base URLs returned 451 or network error from Vercel's servers. " +
-                   "Binance blocks requests from Vercel's IP ranges. " +
-                   "Consider proxying via a VPS in a non-restricted region.";
+  // Find first reachable base URL
+  let workingBase = null;
+  for (const base of BASE_URLS) {
+    const r = await probe(KEY, SECRET, base, "/fapi/v1/userTrades", { symbol: "BTCUSDT", limit: 1 });
+    if (r.httpStatus !== 451 && r.httpStatus !== "fetch_error") {
+      workingBase = base;
+      report.workingBase = base;
+      report.baseProbe   = r;
+      break;
+    }
+    report[`blocked_${base}`] = r.httpStatus;
   }
+
+  if (!workingBase) {
+    report.error = "All base URLs geo-blocked (451) from Vercel.";
+    return res.status(200).json(report);
+  }
+
+  // Test both candidate endpoints side by side
+  const [userTrades, income] = await Promise.all([
+    probe(KEY, SECRET, workingBase, "/fapi/v1/userTrades", { symbol: "BTCUSDT", limit: 5 }),
+    probe(KEY, SECRET, workingBase, "/fapi/v1/income",     { incomeType: "REALIZED_PNL", limit: 5 }),
+  ]);
+
+  report.endpoints = {
+    "/fapi/v1/userTrades": {
+      ...userTrades,
+      verdict: userTrades.httpStatus === 200 && Array.isArray(userTrades.body) && userTrades.body.length > 0
+        ? "✓ returns data"
+        : userTrades.httpStatus === 200
+          ? "⚠ 200 but empty array (no trades for BTCUSDT, or no history)"
+          : `✗ status ${userTrades.httpStatus}`,
+    },
+    "/fapi/v1/income": {
+      ...income,
+      verdict: income.httpStatus === 200 && Array.isArray(income.body) && income.body.length > 0
+        ? "✓ returns data"
+        : income.httpStatus === 200
+          ? "⚠ 200 but empty array (no realized PnL found)"
+          : `✗ status ${income.httpStatus}`,
+    },
+  };
 
   return res.status(200).json(report);
 };
