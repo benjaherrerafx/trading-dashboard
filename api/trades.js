@@ -3,6 +3,42 @@ const { Client } = require("@notionhq/client");
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
 const DATABASE_ID = process.env.NOTION_DATABASE_ID;
 
+function parseRR(rrStr) {
+  if (!rrStr) return null;
+  const cleaned = rrStr.trim();
+  if (cleaned.includes(":")) {
+    const parts = cleaned.split(":");
+    const num = parseFloat(parts[0]);
+    const den = parseFloat(parts[1]);
+    if (!isNaN(num) && !isNaN(den) && den !== 0)
+      return parseFloat((num / den).toFixed(2));
+  }
+  const num = parseFloat(cleaned.replace(/[^0-9.-]/g, ""));
+  return isNaN(num) ? null : num;
+}
+
+function calcPeriodStats(filteredTrades) {
+  const total = filteredTrades.length;
+  const wins = filteredTrades.filter((t) => t.profit).length;
+  const losses = filteredTrades.filter((t) => t.loss).length;
+  const breakEvens = filteredTrades.filter((t) => t.breakEven).length;
+  const winRate =
+    total > 0 ? parseFloat(((wins / total) * 100).toFixed(1)) : 0;
+  const totalPnL = parseFloat(
+    filteredTrades.reduce((s, t) => s + t.netPnL, 0).toFixed(2)
+  );
+  const rrValues = filteredTrades
+    .map((t) => parseRR(t.rr))
+    .filter((v) => v !== null && v > 0);
+  const avgRR =
+    rrValues.length > 0
+      ? parseFloat(
+          (rrValues.reduce((s, v) => s + v, 0) / rrValues.length).toFixed(2)
+        )
+      : 0;
+  return { total, wins, losses, breakEvens, winRate, totalPnL, avgRR };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET");
@@ -46,27 +82,44 @@ module.exports = async function handler(req, res) {
       };
     });
 
+    // --- Legacy stats ---
     const totalTrades = trades.length;
     const wins = trades.filter((t) => t.profit).length;
     const losses = trades.filter((t) => t.loss).length;
     const breakEvens = trades.filter((t) => t.breakEven).length;
-    const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : 0;
+    const winRate =
+      totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : 0;
     const totalPnL = trades.reduce((sum, t) => sum + t.netPnL, 0);
-    const avgWin = wins > 0 ? trades.filter((t) => t.profit).reduce((s, t) => s + t.netPnL, 0) / wins : 0;
-    const avgLoss = losses > 0 ? trades.filter((t) => t.loss).reduce((s, t) => s + t.netPnL, 0) / losses : 0;
-    const bestTrade = trades.length > 0 ? Math.max(...trades.map((t) => t.netPnL)) : 0;
-    const worstTrade = trades.length > 0 ? Math.min(...trades.map((t) => t.netPnL)) : 0;
+    const avgWin =
+      wins > 0
+        ? trades.filter((t) => t.profit).reduce((s, t) => s + t.netPnL, 0) /
+          wins
+        : 0;
+    const avgLoss =
+      losses > 0
+        ? trades.filter((t) => t.loss).reduce((s, t) => s + t.netPnL, 0) /
+          losses
+        : 0;
+    const bestTrade =
+      trades.length > 0 ? Math.max(...trades.map((t) => t.netPnL)) : 0;
+    const worstTrade =
+      trades.length > 0 ? Math.min(...trades.map((t) => t.netPnL)) : 0;
 
     let cumPnL = 0;
     const cumulativePnL = trades.map((t) => {
       cumPnL += t.netPnL;
-      return { trade: t.number, date: t.openTrade, cumPnL: parseFloat(cumPnL.toFixed(2)) };
+      return {
+        trade: t.number,
+        date: t.openTrade,
+        cumPnL: parseFloat(cumPnL.toFixed(2)),
+      };
     });
 
     const bySession = {};
     trades.forEach((t) => {
       if (!t.session) return;
-      if (!bySession[t.session]) bySession[t.session] = { pnl: 0, count: 0, wins: 0 };
+      if (!bySession[t.session])
+        bySession[t.session] = { pnl: 0, count: 0, wins: 0 };
       bySession[t.session].pnl += t.netPnL;
       bySession[t.session].count++;
       if (t.profit) bySession[t.session].wins++;
@@ -75,7 +128,8 @@ module.exports = async function handler(req, res) {
     const byEntryModel = {};
     trades.forEach((t) => {
       t.entryModel.forEach((model) => {
-        if (!byEntryModel[model]) byEntryModel[model] = { pnl: 0, count: 0, wins: 0 };
+        if (!byEntryModel[model])
+          byEntryModel[model] = { pnl: 0, count: 0, wins: 0 };
         byEntryModel[model].pnl += t.netPnL;
         byEntryModel[model].count++;
         if (t.profit) byEntryModel[model].wins++;
@@ -85,7 +139,8 @@ module.exports = async function handler(req, res) {
     const byQuality = {};
     trades.forEach((t) => {
       if (!t.setupQuality) return;
-      if (!byQuality[t.setupQuality]) byQuality[t.setupQuality] = { pnl: 0, count: 0, wins: 0 };
+      if (!byQuality[t.setupQuality])
+        byQuality[t.setupQuality] = { pnl: 0, count: 0, wins: 0 };
       byQuality[t.setupQuality].pnl += t.netPnL;
       byQuality[t.setupQuality].count++;
       if (t.profit) byQuality[t.setupQuality].wins++;
@@ -103,11 +158,76 @@ module.exports = async function handler(req, res) {
     const byPosition = {};
     trades.forEach((t) => {
       if (!t.position) return;
-      if (!byPosition[t.position]) byPosition[t.position] = { pnl: 0, count: 0, wins: 0 };
+      if (!byPosition[t.position])
+        byPosition[t.position] = { pnl: 0, count: 0, wins: 0 };
       byPosition[t.position].pnl += t.netPnL;
       byPosition[t.position].count++;
       if (t.profit) byPosition[t.position].wins++;
     });
+
+    // --- Period Stats ---
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    const dow = startOfWeek.getDay();
+    startOfWeek.setDate(startOfWeek.getDate() - (dow === 0 ? 6 : dow - 1));
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+    const byPeriod = {
+      thisWeek: calcPeriodStats(
+        trades.filter(
+          (t) => t.openTrade && new Date(t.openTrade) >= startOfWeek
+        )
+      ),
+      thisMonth: calcPeriodStats(
+        trades.filter(
+          (t) => t.openTrade && new Date(t.openTrade) >= startOfMonth
+        )
+      ),
+      thisYear: calcPeriodStats(
+        trades.filter(
+          (t) => t.openTrade && new Date(t.openTrade) >= startOfYear
+        )
+      ),
+      allTime: calcPeriodStats(trades),
+    };
+
+    // --- Monthly Stats ---
+    const monthlyMap = {};
+    trades.forEach((t) => {
+      if (!t.openTrade) return;
+      const d = new Date(t.openTrade);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!monthlyMap[key]) monthlyMap[key] = [];
+      monthlyMap[key].push(t);
+    });
+    const monthlyStats = Object.entries(monthlyMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, monthTrades]) => ({
+        month,
+        ...calcPeriodStats(monthTrades),
+      }));
+
+    // --- Daily Equity Curve ---
+    const byDate = {};
+    trades.forEach((t) => {
+      if (!t.openTrade) return;
+      const dateKey = t.openTrade.split("T")[0];
+      if (!byDate[dateKey]) byDate[dateKey] = 0;
+      byDate[dateKey] += t.netPnL;
+    });
+    let runningPnL = 0;
+    const equityCurve = Object.entries(byDate)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, pnl]) => {
+        runningPnL += pnl;
+        return {
+          date,
+          pnl: parseFloat(pnl.toFixed(2)),
+          cumPnL: parseFloat(runningPnL.toFixed(2)),
+        };
+      });
 
     res.status(200).json({
       trades,
@@ -129,6 +249,9 @@ module.exports = async function handler(req, res) {
       byQuality,
       byDay,
       byPosition,
+      byPeriod,
+      monthlyStats,
+      equityCurve,
     });
   } catch (err) {
     console.error(err);

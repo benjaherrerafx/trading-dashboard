@@ -3,317 +3,819 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Trading Dashboard</title>
+  <title>Trading Journal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
+    :root {
+      --bg:        #07070d;
+      --surface:   #0d0d1a;
+      --surface-2: #121222;
+      --border:    #1a1a2e;
+      --border-2:  #252540;
+      --text-1:    #eeeef8;
+      --text-2:    #7878a0;
+      --text-3:    #383858;
+      --green:     #22c55e;
+      --green-dim: rgba(34,197,94,0.10);
+      --green-bd:  rgba(34,197,94,0.25);
+      --red:       #ef4444;
+      --red-dim:   rgba(239,68,68,0.10);
+      --red-bd:    rgba(239,68,68,0.25);
+      --accent:    #6366f1;
+      --accent-dim:rgba(99,102,241,0.15);
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      background: #0d0d0d;
-      color: #e0e0e0;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      padding: 24px;
+      background: var(--bg);
+      color: var(--text-1);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
     }
 
-    h1 {
-      font-size: 1.6rem;
-      font-weight: 700;
-      margin-bottom: 24px;
-      color: #fff;
+    /* ── HEADER ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
 
-    h1 span { color: #4ade80; }
-
-    /* KPI CARDS */
-    .kpis {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 12px;
-      margin-bottom: 28px;
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
-    .kpi {
-      background: #1a1a1a;
-      border: 1px solid #2a2a2a;
-      border-radius: 10px;
-      padding: 16px;
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s infinite;
     }
 
-    .kpi .label {
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.4; }
+    }
+
+    .header-brand h1 {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text-1);
+      letter-spacing: 0.02em;
+    }
+
+    .header-right {
       font-size: 0.72rem;
-      color: #888;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 6px;
+      color: var(--text-3);
     }
 
-    .kpi .value {
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: #fff;
+    /* ── MAIN ── */
+    .main {
+      padding: 24px 28px;
+      max-width: 1600px;
+      margin: 0 auto;
     }
 
-    .kpi .value.green { color: #4ade80; }
-    .kpi .value.red   { color: #f87171; }
-
-    /* CHARTS GRID */
-    .charts {
+    /* ── PERIOD CARDS ── */
+    .period-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
     }
 
-    .chart-card {
-      background: #1a1a1a;
-      border: 1px solid #2a2a2a;
-      border-radius: 10px;
+    .period-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+
+    .period-card:hover {
+      border-color: var(--border-2);
+      transform: translateY(-1px);
+    }
+
+    .period-title {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-3);
+      margin-bottom: 16px;
+    }
+
+    .period-metrics-row {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 12px;
+    }
+
+    .period-metric .mlabel {
+      font-size: 0.62rem;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 2px;
+    }
+
+    .period-metric .mvalue {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-1);
+    }
+
+    .period-pnl {
+      font-size: 1.55rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 14px;
+      line-height: 1.2;
+    }
+
+    .period-pnl.pos { color: var(--green); }
+    .period-pnl.neg { color: var(--red); }
+    .period-pnl.neu { color: var(--text-2); }
+
+    .period-counters {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .cnt {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.76rem;
+      font-weight: 500;
+    }
+
+    .cnt-circle {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.55rem;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .cnt-circle.w { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-bd); }
+    .cnt-circle.l { background: var(--red-dim);   color: var(--red);   border: 1px solid var(--red-bd); }
+    .cnt-circle.b { background: rgba(120,120,160,0.12); color: var(--text-2); border: 1px solid rgba(120,120,160,0.22); }
+
+    .cnt-num { color: var(--text-2); }
+
+    /* ── CHART LAYOUT ── */
+    .row { display: grid; gap: 14px; margin-bottom: 14px; }
+    .row.full   { grid-template-columns: 1fr; }
+    .row.half   { grid-template-columns: 1fr 1fr; }
+    .row.thirds { grid-template-columns: 1fr 1fr 1fr; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
       padding: 20px;
     }
 
-    .chart-card.wide {
-      grid-column: 1 / -1;
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
     }
 
-    .chart-card h2 {
-      font-size: 0.85rem;
-      color: #aaa;
+    .card-header h2 {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-3);
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 14px;
+      letter-spacing: 0.1em;
     }
 
-    canvas { width: 100% !important; }
+    /* ── TIMEFRAME SELECTOR ── */
+    .tf-sel {
+      display: flex;
+      gap: 2px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 3px;
+    }
 
-    #error {
-      background: #2a1010;
-      border: 1px solid #f87171;
-      color: #f87171;
-      padding: 16px;
-      border-radius: 8px;
+    .tf-btn {
+      background: none;
+      border: none;
+      color: var(--text-3);
+      font-size: 0.68rem;
+      font-weight: 600;
+      font-family: inherit;
+      padding: 4px 9px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.03em;
+    }
+
+    .tf-btn:hover  { color: var(--text-2); }
+    .tf-btn.active { background: var(--accent); color: #fff; }
+
+    /* ── CHART WRAPPERS ── */
+    .chart-wrap { position: relative; }
+    .chart-wrap.h-xl  { height: 280px; }
+    .chart-wrap.h-lg  { height: 240px; }
+    .chart-wrap.h-md  { height: 200px; }
+
+    /* ── MONTHLY TABLE ── */
+    .monthly-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+
+    .monthly-table th {
+      padding: 9px 10px;
+      text-align: left;
+      font-size: 0.63rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-3);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .monthly-table th:not(:first-child) { text-align: right; }
+
+    .monthly-table td {
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(26,26,46,0.6);
+    }
+
+    .monthly-table td:not(:first-child) { text-align: right; }
+    .monthly-table tr:last-child td { border-bottom: none; }
+
+    .monthly-table tr.pos-row td:first-child { border-left: 2px solid var(--green); }
+    .monthly-table tr.neg-row td:first-child { border-left: 2px solid var(--red); }
+
+    .mth-name { font-weight: 500; color: var(--text-1); }
+    .pnl-pos  { color: var(--green); font-weight: 600; }
+    .pnl-neg  { color: var(--red);   font-weight: 600; }
+    .val-dim  { color: var(--text-2); }
+
+    .table-scroll { overflow-y: auto; max-height: 300px; }
+
+    /* scrollbar */
+    .table-scroll::-webkit-scrollbar { width: 4px; }
+    .table-scroll::-webkit-scrollbar-track { background: transparent; }
+    .table-scroll::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
+
+    /* ── STATES ── */
+    #error-banner {
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: var(--red);
+      padding: 16px 24px;
+      font-size: 0.83rem;
       display: none;
-      margin-bottom: 20px;
     }
 
-    #loading {
-      color: #888;
-      margin-bottom: 20px;
+    .loading-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 80vh;
+      gap: 14px;
+      color: var(--text-3);
+    }
+
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 2px solid var(--border-2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-label {
+      font-size: 0.78rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1100px) {
+      .period-grid { grid-template-columns: repeat(2, 1fr); }
+      .row.thirds  { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 700px) {
+      .period-grid { grid-template-columns: 1fr 1fr; }
+      .row.half    { grid-template-columns: 1fr; }
+      .row.thirds  { grid-template-columns: 1fr; }
+      .main { padding: 16px; }
+    }
+
+    @media (max-width: 440px) {
+      .period-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <h1>📊 Trading Dashboard — <span>Abril 2026</span></h1>
-  <div id="error"></div>
-  <div id="loading">Loading data...</div>
 
-  <div class="kpis" id="kpis"></div>
+  <header class="header">
+    <div class="header-brand">
+      <div class="live-dot"></div>
+      <h1>Trading Journal</h1>
+    </div>
+    <div class="header-right" id="lastUpdated"></div>
+  </header>
 
-  <div class="charts">
-    <div class="chart-card wide">
-      <h2>Cumulative P&L</h2>
-      <canvas id="chartCumPnL" height="80"></canvas>
-    </div>
-    <div class="chart-card">
-      <h2>Win / Loss / Break Even</h2>
-      <canvas id="chartOutcome" height="220"></canvas>
-    </div>
-    <div class="chart-card">
-      <h2>P&L by Session</h2>
-      <canvas id="chartSession" height="220"></canvas>
-    </div>
-    <div class="chart-card">
-      <h2>P&L by Day</h2>
-      <canvas id="chartDay" height="220"></canvas>
-    </div>
-    <div class="chart-card">
-      <h2>P&L by Position</h2>
-      <canvas id="chartPosition" height="220"></canvas>
-    </div>
-    <div class="chart-card wide">
-      <h2>P&L by Entry Model</h2>
-      <canvas id="chartModel" height="80"></canvas>
-    </div>
-    <div class="chart-card wide">
-      <h2>P&L by Setup Quality</h2>
-      <canvas id="chartQuality" height="80"></canvas>
-    </div>
+  <div id="error-banner"></div>
+
+  <div class="loading-wrap" id="loadingEl">
+    <div class="spinner"></div>
+    <div class="loading-label">Loading trades</div>
   </div>
 
+  <main class="main" id="dashboard" style="display:none">
+
+    <!-- PERIOD CARDS -->
+    <div class="period-grid" id="periodGrid"></div>
+
+    <!-- EQUITY CURVE -->
+    <div class="row full">
+      <div class="card">
+        <div class="card-header">
+          <h2>Account Balance</h2>
+          <div class="tf-sel" id="equityTf">
+            <button class="tf-btn" data-tf="1W">1W</button>
+            <button class="tf-btn" data-tf="1M">1M</button>
+            <button class="tf-btn" data-tf="3M">3M</button>
+            <button class="tf-btn" data-tf="6M">6M</button>
+            <button class="tf-btn" data-tf="1Y">1Y</button>
+            <button class="tf-btn active" data-tf="ALL">ALL</button>
+          </div>
+        </div>
+        <div class="chart-wrap h-xl">
+          <canvas id="chartEquity"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- RR BY MONTH + MONTHLY TABLE -->
+    <div class="row half">
+      <div class="card">
+        <div class="card-header">
+          <h2>Reward : Risk by Month</h2>
+          <div class="tf-sel" id="rrTf">
+            <button class="tf-btn" data-tf="3">3M</button>
+            <button class="tf-btn" data-tf="6">6M</button>
+            <button class="tf-btn active" data-tf="0">ALL</button>
+          </div>
+        </div>
+        <div class="chart-wrap h-lg">
+          <canvas id="chartRR"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2>Monthly Stats</h2>
+        </div>
+        <div class="table-scroll">
+          <table class="monthly-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Trades</th>
+                <th>Win%</th>
+                <th>Avg RR</th>
+                <th>P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody id="monthlyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SESSION / DAY / POSITION -->
+    <div class="row thirds">
+      <div class="card">
+        <div class="card-header"><h2>P&amp;L by Session</h2></div>
+        <div class="chart-wrap h-md"><canvas id="chartSession"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>P&amp;L by Day</h2></div>
+        <div class="chart-wrap h-md"><canvas id="chartDay"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>P&amp;L by Position</h2></div>
+        <div class="chart-wrap h-md"><canvas id="chartPosition"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ENTRY MODEL -->
+    <div class="row full">
+      <div class="card">
+        <div class="card-header"><h2>P&amp;L by Entry Model</h2></div>
+        <div class="chart-wrap h-md"><canvas id="chartModel"></canvas></div>
+      </div>
+    </div>
+
+    <!-- SETUP QUALITY -->
+    <div class="row full">
+      <div class="card">
+        <div class="card-header"><h2>P&amp;L by Setup Quality</h2></div>
+        <div class="chart-wrap h-md"><canvas id="chartQuality"></canvas></div>
+      </div>
+    </div>
+
+  </main>
+
   <script>
-    const COLORS = {
-      green:  '#4ade80',
-      red:    '#f87171',
-      blue:   '#60a5fa',
-      yellow: '#fbbf24',
-      purple: '#a78bfa',
-      gray:   '#6b7280',
+    /* ── CONSTANTS ── */
+    const GREEN  = '#22c55e';
+    const RED    = '#ef4444';
+    const ACCENT = '#6366f1';
+    const DIM    = '#383858';
+
+    const TOOLTIP_BASE = {
+      backgroundColor: '#0d0d1a',
+      borderColor: '#252540',
+      borderWidth: 1,
+      titleColor: '#7878a0',
+      bodyColor: '#eeeef8',
+      padding: 12,
+      cornerRadius: 8,
+      displayColors: false,
     };
 
-    const chartDefaults = {
-      responsive: true,
-      plugins: { legend: { labels: { color: '#ccc', font: { size: 12 } } } },
-      scales: {
-        x: { ticks: { color: '#888' }, grid: { color: '#2a2a2a' } },
-        y: { ticks: { color: '#888' }, grid: { color: '#2a2a2a' } },
+    const SCALES_BASE = {
+      x: {
+        ticks: { color: DIM, font: { size: 11, family: 'Inter' } },
+        grid: { color: 'rgba(26,26,46,0.7)' },
+        border: { color: '#1a1a2e' },
+      },
+      y: {
+        ticks: { color: DIM, font: { size: 11, family: 'Inter' } },
+        grid: { color: 'rgba(26,26,46,0.7)' },
+        border: { color: '#1a1a2e' },
       },
     };
 
-    function barColor(values) {
-      return values.map(v => v >= 0 ? COLORS.green : COLORS.red);
-    }
-
-    function kpi(label, value, cls = '') {
-      return `<div class="kpi">
-        <div class="label">${label}</div>
-        <div class="value ${cls}">${value}</div>
-      </div>`;
-    }
-
+    /* ── FORMAT HELPERS ── */
     function fmt(n) {
-      return (n >= 0 ? '+' : '') + '$' + n.toFixed(2);
+      const abs = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return (n >= 0 ? '+$' : '-$') + abs;
     }
 
+    function fmtShort(n) {
+      if (Math.abs(n) >= 1000)
+        return (n >= 0 ? '+$' : '-$') + (Math.abs(n) / 1000).toFixed(1) + 'k';
+      return fmt(n);
+    }
+
+    function fmtDate(str) {
+      const d = new Date(str + 'T12:00:00Z');
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function fmtMonth(yyyymm) {
+      const [y, m] = yyyymm.split('-');
+      const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${names[+m - 1]} '${y.slice(2)}`;
+    }
+
+    function barColors(vals) {
+      return vals.map(v => v >= 0 ? GREEN : RED);
+    }
+
+    /* ── STATE ── */
+    let equityChart  = null;
+    let rrChart      = null;
+    let allEquity    = [];
+    let allMonthly   = [];
+
+    /* ── EQUITY CHART ── */
+    function filteredEquity(tf) {
+      const days = { '1W':7, '1M':30, '3M':90, '6M':180, '1Y':365 };
+      if (tf === 'ALL') return allEquity;
+      const cutoff = Date.now() - days[tf] * 86400000;
+      return allEquity.filter(d => new Date(d.date + 'T12:00:00Z').getTime() >= cutoff);
+    }
+
+    function renderEquity(tf) {
+      const data   = filteredEquity(tf);
+      const labels = data.map(d => fmtDate(d.date));
+      const values = data.map(d => d.cumPnL);
+      const sparse = data.length > 40;
+
+      if (equityChart) {
+        equityChart.data.labels = labels;
+        equityChart.data.datasets[0].data = values;
+        equityChart.data.datasets[0].pointRadius = sparse ? 0 : 3;
+        equityChart.update('none');
+        return;
+      }
+
+      const ctx  = document.getElementById('chartEquity').getContext('2d');
+      const grad = ctx.createLinearGradient(0, 0, 0, 280);
+      grad.addColorStop(0, 'rgba(99,102,241,0.22)');
+      grad.addColorStop(1, 'rgba(99,102,241,0.00)');
+
+      equityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            borderColor: ACCENT,
+            backgroundColor: grad,
+            fill: true,
+            tension: 0.35,
+            pointRadius: sparse ? 0 : 3,
+            pointHoverRadius: 5,
+            borderWidth: 2,
+            pointBackgroundColor: ACCENT,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...TOOLTIP_BASE,
+              callbacks: {
+                title: items => items[0].label,
+                label: item => '  ' + fmt(item.raw),
+              },
+            },
+          },
+          scales: {
+            ...SCALES_BASE,
+            y: {
+              ...SCALES_BASE.y,
+              ticks: { ...SCALES_BASE.y.ticks, callback: v => fmtShort(v) },
+            },
+          },
+        },
+      });
+    }
+
+    /* ── RR CHART ── */
+    function filteredRR(months) {
+      if (!months) return allMonthly;
+      return allMonthly.slice(-months);
+    }
+
+    function renderRR(months) {
+      const data   = filteredRR(months);
+      const labels = data.map(d => fmtMonth(d.month));
+      const values = data.map(d => d.avgRR);
+      const colors = values.map(v => v >= 1 ? GREEN : RED);
+
+      if (rrChart) {
+        rrChart.data.labels = labels;
+        rrChart.data.datasets[0].data = values;
+        rrChart.data.datasets[0].backgroundColor = colors;
+        rrChart.update('none');
+        return;
+      }
+
+      const ctx = document.getElementById('chartRR').getContext('2d');
+      rrChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors,
+            borderRadius: 5,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...TOOLTIP_BASE,
+              callbacks: { label: item => '  RR: ' + item.raw.toFixed(2) + 'x' },
+            },
+          },
+          scales: {
+            ...SCALES_BASE,
+            y: {
+              ...SCALES_BASE.y,
+              ticks: { ...SCALES_BASE.y.ticks, callback: v => v.toFixed(1) + 'x' },
+            },
+          },
+        },
+      });
+    }
+
+    /* ── BAR CHART HELPER ── */
+    function makeBar(canvasId, labels, values) {
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      return new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: barColors(values),
+            borderRadius: 5,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...TOOLTIP_BASE,
+              callbacks: { label: item => '  ' + fmt(item.raw) },
+            },
+          },
+          scales: {
+            ...SCALES_BASE,
+            y: {
+              ...SCALES_BASE.y,
+              ticks: { ...SCALES_BASE.y.ticks, callback: v => fmtShort(v) },
+            },
+          },
+        },
+      });
+    }
+
+    /* ── PERIOD CARDS ── */
+    function renderPeriods(byPeriod) {
+      const defs = [
+        { key: 'thisWeek',  label: 'This Week' },
+        { key: 'thisMonth', label: 'This Month' },
+        { key: 'thisYear',  label: 'This Year' },
+        { key: 'allTime',   label: 'All Time' },
+      ];
+
+      document.getElementById('periodGrid').innerHTML = defs.map(({ key, label }) => {
+        const p = byPeriod[key];
+        const pnlCls = p.totalPnL > 0 ? 'pos' : p.totalPnL < 0 ? 'neg' : 'neu';
+        const pnlStr = p.total === 0 ? '$0.00' : fmt(p.totalPnL);
+        const rrStr  = p.avgRR > 0 ? p.avgRR.toFixed(2) : '—';
+        const wrStr  = p.total > 0 ? p.winRate + '%' : '—';
+        return `
+          <div class="period-card">
+            <div class="period-title">${label}</div>
+            <div class="period-metrics-row">
+              <div class="period-metric">
+                <div class="mlabel">Avg RR</div>
+                <div class="mvalue">${rrStr}</div>
+              </div>
+              <div class="period-metric">
+                <div class="mlabel">Win Rate</div>
+                <div class="mvalue">${wrStr}</div>
+              </div>
+            </div>
+            <div class="period-pnl ${pnlCls}">${pnlStr}</div>
+            <div class="period-counters">
+              <div class="cnt"><div class="cnt-circle w">W</div><span class="cnt-num">${p.wins}</span></div>
+              <div class="cnt"><div class="cnt-circle l">L</div><span class="cnt-num">${p.losses}</span></div>
+              <div class="cnt"><div class="cnt-circle b">BE</div><span class="cnt-num">${p.breakEvens}</span></div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    /* ── MONTHLY TABLE ── */
+    function renderMonthly(monthlyStats) {
+      const reversed = [...monthlyStats].reverse();
+      document.getElementById('monthlyBody').innerHTML = reversed.map(m => {
+        const rowCls = m.totalPnL > 0 ? 'pos-row' : m.totalPnL < 0 ? 'neg-row' : '';
+        const pnlCls = m.totalPnL >= 0 ? 'pnl-pos' : 'pnl-neg';
+        return `
+          <tr class="${rowCls}">
+            <td class="mth-name">${fmtMonth(m.month)}</td>
+            <td class="val-dim">${m.total}</td>
+            <td class="val-dim">${m.winRate}%</td>
+            <td class="val-dim">${m.avgRR > 0 ? m.avgRR.toFixed(2) : '—'}</td>
+            <td class="${pnlCls}">${fmt(m.totalPnL)}</td>
+          </tr>`;
+      }).join('');
+    }
+
+    /* ── TIMEFRAME WIRING ── */
+    function wireTf(containerId, callback) {
+      document.getElementById(containerId).addEventListener('click', e => {
+        const btn = e.target.closest('.tf-btn');
+        if (!btn) return;
+        document.querySelectorAll(`#${containerId} .tf-btn`).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        callback(btn.dataset.tf);
+      });
+    }
+
+    /* ── MAIN LOAD ── */
     async function load() {
-      const loadingEl = document.getElementById('loading');
-      const errorEl   = document.getElementById('error');
       try {
         const res  = await fetch('/api/trades');
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        loadingEl.style.display = 'none';
+        const { byPeriod, monthlyStats, equityCurve, bySession, byDay, byPosition, byEntryModel, byQuality } = data;
 
-        const { stats, cumulativePnL, bySession, byEntryModel, byQuality, byDay, byPosition } = data;
+        allEquity  = equityCurve;
+        allMonthly = monthlyStats;
 
-        // KPIs
-        document.getElementById('kpis').innerHTML = [
-          kpi('Total Trades', stats.totalTrades),
-          kpi('Win Rate', stats.winRate + '%', stats.winRate >= 50 ? 'green' : 'red'),
-          kpi('Total P&L', fmt(stats.totalPnL), stats.totalPnL >= 0 ? 'green' : 'red'),
-          kpi('Avg Win', fmt(stats.avgWin), 'green'),
-          kpi('Avg Loss', fmt(stats.avgLoss), 'red'),
-          kpi('Best Trade', fmt(stats.bestTrade), 'green'),
-          kpi('Worst Trade', fmt(stats.worstTrade), 'red'),
-          kpi('Wins', stats.wins, 'green'),
-          kpi('Losses', stats.losses, 'red'),
-          kpi('Break Evens', stats.breakEvens),
-        ].join('');
+        document.getElementById('loadingEl').style.display  = 'none';
+        document.getElementById('dashboard').style.display  = 'block';
+        document.getElementById('lastUpdated').textContent  =
+          'Updated ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-        // Cumulative P&L line chart
-        new Chart(document.getElementById('chartCumPnL'), {
-          type: 'line',
-          data: {
-            labels: cumulativePnL.map(p => p.trade || p.date),
-            datasets: [{
-              label: 'Cumulative P&L',
-              data: cumulativePnL.map(p => p.cumPnL),
-              borderColor: COLORS.blue,
-              backgroundColor: 'rgba(96,165,250,0.1)',
-              fill: true,
-              tension: 0.3,
-              pointRadius: 3,
-            }],
-          },
-          options: chartDefaults,
-        });
+        // Period cards
+        renderPeriods(byPeriod);
 
-        // Win/Loss/BE doughnut
-        new Chart(document.getElementById('chartOutcome'), {
-          type: 'doughnut',
-          data: {
-            labels: ['Wins', 'Losses', 'Break Even'],
-            datasets: [{
-              data: [stats.wins, stats.losses, stats.breakEvens],
-              backgroundColor: [COLORS.green, COLORS.red, COLORS.gray],
-              borderWidth: 0,
-            }],
-          },
-          options: {
-            responsive: true,
-            plugins: { legend: { labels: { color: '#ccc' } } },
-          },
-        });
+        // Equity curve
+        renderEquity('ALL');
+        wireTf('equityTf', tf => renderEquity(tf));
 
-        // By Session bar chart
+        // RR chart
+        renderRR(0);
+        wireTf('rrTf', tf => renderRR(+tf || 0));
+
+        // Monthly table
+        renderMonthly(monthlyStats);
+
+        // Session
         const sessions = Object.entries(bySession);
-        new Chart(document.getElementById('chartSession'), {
-          type: 'bar',
-          data: {
-            labels: sessions.map(([k]) => k),
-            datasets: [{
-              label: 'Net P&L',
-              data: sessions.map(([, v]) => v.pnl),
-              backgroundColor: barColor(sessions.map(([, v]) => v.pnl)),
-            }],
-          },
-          options: chartDefaults,
-        });
+        makeBar('chartSession',
+          sessions.map(([k]) => k),
+          sessions.map(([, v]) => v.pnl)
+        );
 
-        // By Day bar chart
-        const dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-        const days = dayOrder.filter(d => byDay[d]).map(d => [d, byDay[d]]);
-        new Chart(document.getElementById('chartDay'), {
-          type: 'bar',
-          data: {
-            labels: days.map(([k]) => k),
-            datasets: [{
-              label: 'Net P&L',
-              data: days.map(([, v]) => v.pnl),
-              backgroundColor: barColor(days.map(([, v]) => v.pnl)),
-            }],
-          },
-          options: chartDefaults,
-        });
+        // Day
+        const DAY_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        const days = DAY_ORDER.filter(d => byDay[d]);
+        makeBar('chartDay',
+          days.map(d => d.slice(0, 3)),
+          days.map(d => byDay[d].pnl)
+        );
 
-        // By Position bar chart
+        // Position
         const positions = Object.entries(byPosition);
-        new Chart(document.getElementById('chartPosition'), {
-          type: 'bar',
-          data: {
-            labels: positions.map(([k]) => k),
-            datasets: [{
-              label: 'Net P&L',
-              data: positions.map(([, v]) => v.pnl),
-              backgroundColor: barColor(positions.map(([, v]) => v.pnl)),
-            }],
-          },
-          options: chartDefaults,
-        });
+        makeBar('chartPosition',
+          positions.map(([k]) => k),
+          positions.map(([, v]) => v.pnl)
+        );
 
-        // By Entry Model
+        // Entry Model
         const models = Object.entries(byEntryModel).sort((a, b) => b[1].pnl - a[1].pnl);
-        new Chart(document.getElementById('chartModel'), {
-          type: 'bar',
-          data: {
-            labels: models.map(([k]) => k),
-            datasets: [{
-              label: 'Net P&L',
-              data: models.map(([, v]) => v.pnl),
-              backgroundColor: barColor(models.map(([, v]) => v.pnl)),
-            }],
-          },
-          options: chartDefaults,
-        });
+        makeBar('chartModel',
+          models.map(([k]) => k),
+          models.map(([, v]) => v.pnl)
+        );
 
-        // By Setup Quality
-        const qualityOrder = ['⭐', '⭐⭐', '⭐⭐⭐'];
-        const quality = qualityOrder.filter(q => byQuality[q]).map(q => [q, byQuality[q]]);
-        new Chart(document.getElementById('chartQuality'), {
-          type: 'bar',
-          data: {
-            labels: quality.map(([k]) => k),
-            datasets: [{
-              label: 'Net P&L',
-              data: quality.map(([, v]) => v.pnl),
-              backgroundColor: barColor(quality.map(([, v]) => v.pnl)),
-            }],
-          },
-          options: chartDefaults,
-        });
+        // Setup Quality
+        const Q_ORDER = ['⭐','⭐⭐','⭐⭐⭐'];
+        const quality = Q_ORDER.filter(q => byQuality[q]);
+        makeBar('chartQuality',
+          quality,
+          quality.map(q => byQuality[q].pnl)
+        );
 
       } catch (err) {
-        loadingEl.style.display = 'none';
-        errorEl.style.display = 'block';
-        errorEl.textContent = '❌ Error: ' + err.message;
+        document.getElementById('loadingEl').style.display = 'none';
+        const eb = document.getElementById('error-banner');
+        eb.style.display = 'block';
+        eb.textContent   = 'Failed to load trading data: ' + err.message;
       }
     }
 
