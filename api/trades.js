@@ -1,8 +1,10 @@
 const crypto = require("crypto");
 
-const BASE   = "https://fapi.binance.com";
-const KEY    = process.env.BINANCE_API_KEY;
-const SECRET = process.env.BINANCE_API_SECRET;
+const BASE = "https://fapi.binance.com";
+
+// KEY and SECRET are read inside the handler (not at module load time)
+// so that missing env vars return a proper error instead of crashing crypto.
+let KEY, SECRET;
 
 const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
@@ -136,6 +138,25 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET");
   res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate=60");
+
+  // Validate env vars before any crypto or fetch operations
+  const missing = [];
+  if (!process.env.BINANCE_API_KEY)    missing.push("BINANCE_API_KEY");
+  if (!process.env.BINANCE_API_SECRET) missing.push("BINANCE_API_SECRET");
+  if (missing.length > 0) {
+    return res.status(500).json({
+      error: `Missing environment variable(s): ${missing.join(", ")}. ` +
+             `Set them in Vercel → Project Settings → Environment Variables.`,
+      env: {
+        BINANCE_API_KEY:    process.env.BINANCE_API_KEY    ? "✓ set" : "✗ missing",
+        BINANCE_API_SECRET: process.env.BINANCE_API_SECRET ? "✓ set" : "✗ missing",
+      },
+    });
+  }
+
+  // Assign after validation so crypto never receives undefined
+  KEY    = process.env.BINANCE_API_KEY;
+  SECRET = process.env.BINANCE_API_SECRET;
 
   try {
     // 1. Fetch all realized PnL income entries (symbol discovery + PnL source)
