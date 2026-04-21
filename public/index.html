@@ -699,37 +699,6 @@
 
     </div>
 
-    <!-- SESSION / DAY / POSITION -->
-    <div class="row thirds">
-      <div class="card">
-        <div class="card-header"><h2>P&amp;L by Session</h2></div>
-        <div class="chart-wrap h-md"><canvas id="chartSession"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-header"><h2>P&amp;L by Day</h2></div>
-        <div class="chart-wrap h-md"><canvas id="chartDay"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-header"><h2>P&amp;L by Position</h2></div>
-        <div class="chart-wrap h-md"><canvas id="chartPosition"></canvas></div>
-      </div>
-    </div>
-
-    <!-- ENTRY MODEL -->
-    <div class="row full">
-      <div class="card">
-        <div class="card-header"><h2>P&amp;L by Entry Model</h2></div>
-        <div class="chart-wrap h-lg"><canvas id="chartModel"></canvas></div>
-      </div>
-    </div>
-
-    <!-- SETUP QUALITY -->
-    <div class="row full">
-      <div class="card">
-        <div class="card-header"><h2>P&amp;L by Setup Quality</h2></div>
-        <div class="chart-wrap h-md"><canvas id="chartQuality"></canvas></div>
-      </div>
-    </div>
 
   </main>
 
@@ -1191,7 +1160,7 @@
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        const { byPeriod, monthlyStats, equityCurve, bySession, byDay, byPosition, byEntryModel, byQuality,
+        const { byPeriod, monthlyStats, equityCurve,
                 symbolSummary, positionBreakdown, stats } = data;
 
         allEquity  = equityCurve;
@@ -1219,42 +1188,6 @@
         // Performance Breakdown
         renderBreakdown({ symbolSummary, positionBreakdown, stats });
 
-        // Session
-        const sessions = Object.entries(bySession);
-        makeBar('chartSession',
-          sessions.map(([k]) => k),
-          sessions.map(([, v]) => v.pnl)
-        );
-
-        // Day
-        const DAY_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-        const days = DAY_ORDER.filter(d => byDay[d]);
-        makeBar('chartDay',
-          days.map(d => d.slice(0, 3)),
-          days.map(d => byDay[d].pnl)
-        );
-
-        // Position
-        const positions = Object.entries(byPosition);
-        makeBar('chartPosition',
-          positions.map(([k]) => k),
-          positions.map(([, v]) => v.pnl)
-        );
-
-        // Entry Model (horizontal)
-        const models = Object.entries(byEntryModel).sort((a, b) => b[1].pnl - a[1].pnl);
-        makeHBar('chartModel',
-          models.map(([k]) => k),
-          models.map(([, v]) => v.pnl)
-        );
-
-        // Setup Quality
-        const Q_ORDER = ['⭐','⭐⭐','⭐⭐⭐'];
-        const quality = Q_ORDER.filter(q => byQuality[q]);
-        makeBar('chartQuality',
-          quality,
-          quality.map(q => byQuality[q].pnl)
-        );
 
       } catch (err) {
         document.getElementById('loadingEl').style.display = 'none';
