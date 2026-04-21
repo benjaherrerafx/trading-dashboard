@@ -412,6 +412,9 @@
               <tr>
                 <th>Month</th>
                 <th>Trades</th>
+                <th>W</th>
+                <th>L</th>
+                <th>BE</th>
                 <th>Win%</th>
                 <th>Avg RR</th>
                 <th>P&amp;L</th>
@@ -443,7 +446,7 @@
     <div class="row full">
       <div class="card">
         <div class="card-header"><h2>P&amp;L by Entry Model</h2></div>
-        <div class="chart-wrap h-md"><canvas id="chartModel"></canvas></div>
+        <div class="chart-wrap h-lg"><canvas id="chartModel"></canvas></div>
       </div>
     </div>
 
@@ -599,31 +602,39 @@
       const data   = filteredRR(months);
       const labels = data.map(d => fmtMonth(d.month));
       const values = data.map(d => d.avgRR);
-      const colors = values.map(v => v >= 1 ? GREEN : RED);
 
       if (rrChart) {
         rrChart.data.labels = labels;
         rrChart.data.datasets[0].data = values;
-        rrChart.data.datasets[0].backgroundColor = colors;
         rrChart.update('none');
         return;
       }
 
-      const ctx = document.getElementById('chartRR').getContext('2d');
+      const ctx  = document.getElementById('chartRR').getContext('2d');
+      const grad = ctx.createLinearGradient(0, 0, 0, 240);
+      grad.addColorStop(0, 'rgba(34,197,94,0.15)');
+      grad.addColorStop(1, 'rgba(34,197,94,0.00)');
+
       rrChart = new Chart(ctx, {
-        type: 'bar',
+        type: 'line',
         data: {
           labels,
           datasets: [{
             data: values,
-            backgroundColor: colors,
-            borderRadius: 5,
-            borderSkipped: false,
+            borderColor: GREEN,
+            backgroundColor: grad,
+            fill: true,
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            borderWidth: 2,
+            pointBackgroundColor: GREEN,
           }],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -652,8 +663,9 @@
           datasets: [{
             data: values,
             backgroundColor: barColors(values),
-            borderRadius: 5,
+            borderRadius: 6,
             borderSkipped: false,
+            maxBarThickness: 40,
           }],
         },
         options: {
@@ -672,6 +684,43 @@
               ...SCALES_BASE.y,
               ticks: { ...SCALES_BASE.y.ticks, callback: v => fmtShort(v) },
             },
+          },
+        },
+      });
+    }
+
+    /* ── HORIZONTAL BAR CHART HELPER ── */
+    function makeHBar(canvasId, labels, values) {
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      return new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: barColors(values),
+            borderRadius: 6,
+            borderSkipped: false,
+            maxBarThickness: 28,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...TOOLTIP_BASE,
+              callbacks: { label: item => '  ' + fmt(item.raw) },
+            },
+          },
+          scales: {
+            x: {
+              ...SCALES_BASE.x,
+              ticks: { ...SCALES_BASE.x.ticks, callback: v => fmtShort(v) },
+            },
+            y: { ...SCALES_BASE.y },
           },
         },
       });
@@ -725,6 +774,9 @@
           <tr class="${rowCls}">
             <td class="mth-name">${fmtMonth(m.month)}</td>
             <td class="val-dim">${m.total}</td>
+            <td style="color:var(--green);font-weight:600">${m.wins}</td>
+            <td style="color:var(--red);font-weight:600">${m.losses}</td>
+            <td class="val-dim">${m.breakEvens}</td>
             <td class="val-dim">${m.winRate}%</td>
             <td class="val-dim">${m.avgRR > 0 ? m.avgRR.toFixed(2) : '—'}</td>
             <td class="${pnlCls}">${fmt(m.totalPnL)}</td>
@@ -796,9 +848,9 @@
           positions.map(([, v]) => v.pnl)
         );
 
-        // Entry Model
+        // Entry Model (horizontal)
         const models = Object.entries(byEntryModel).sort((a, b) => b[1].pnl - a[1].pnl);
-        makeBar('chartModel',
+        makeHBar('chartModel',
           models.map(([k]) => k),
           models.map(([, v]) => v.pnl)
         );
