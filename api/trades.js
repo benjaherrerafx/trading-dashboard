@@ -165,6 +165,54 @@ module.exports = async function handler(req, res) {
       if (t.profit) byPosition[t.position].wins++;
     });
 
+    // --- Symbol Stats ---
+    const byAsset = {};
+    trades.forEach((t) => {
+      if (!t.assets) return;
+      if (!byAsset[t.assets]) byAsset[t.assets] = { pnl: 0, count: 0, wins: 0 };
+      byAsset[t.assets].pnl += t.netPnL;
+      byAsset[t.assets].count++;
+      if (t.profit) byAsset[t.assets].wins++;
+    });
+
+    const symbolList = Object.entries(byAsset).map(([symbol, d]) => ({
+      symbol,
+      totalPnL: parseFloat(d.pnl.toFixed(2)),
+      avgPnL:   parseFloat((d.pnl / d.count).toFixed(2)),
+      count:    d.count,
+    }));
+
+    const symbolSummary = {
+      count:     symbolList.length,
+      bestSum:   symbolList.length ? symbolList.reduce((a, b) => a.totalPnL >= b.totalPnL ? a : b) : null,
+      worstSum:  symbolList.length ? symbolList.reduce((a, b) => a.totalPnL <= b.totalPnL ? a : b) : null,
+      bestAvg:   symbolList.length ? symbolList.reduce((a, b) => a.avgPnL >= b.avgPnL ? a : b) : null,
+      worstAvg:  symbolList.length ? symbolList.reduce((a, b) => a.avgPnL <= b.avgPnL ? a : b) : null,
+    };
+
+    // --- Position Breakdown (Long / Short) ---
+    function calcPositionDetail(pts) {
+      const total      = pts.length;
+      const winTrades  = pts.filter((t) => t.profit);
+      const lossTrades = pts.filter((t) => t.loss);
+      const beTrades   = pts.filter((t) => t.breakEven);
+      const winRate    = total > 0 ? parseFloat(((winTrades.length / total) * 100).toFixed(1)) : 0;
+      const totalPnL   = parseFloat(pts.reduce((s, t) => s + t.netPnL, 0).toFixed(2));
+      const avgWin     = winTrades.length  ? parseFloat((winTrades.reduce((s, t)  => s + t.netPnL, 0) / winTrades.length).toFixed(2))  : 0;
+      const avgLoss    = lossTrades.length ? parseFloat((lossTrades.reduce((s, t) => s + t.netPnL, 0) / lossTrades.length).toFixed(2)) : 0;
+      return { total, wins: winTrades.length, losses: lossTrades.length, breakEvens: beTrades.length, winRate, totalPnL, avgWin, avgLoss };
+    }
+
+    const longTrades  = trades.filter((t) => t.position && t.position.toLowerCase().includes("long"));
+    const shortTrades = trades.filter((t) => t.position && t.position.toLowerCase().includes("short"));
+
+    const positionBreakdown = {
+      long:       calcPositionDetail(longTrades),
+      short:      calcPositionDetail(shortTrades),
+      longCount:  longTrades.length,
+      shortCount: shortTrades.length,
+    };
+
     // --- Period Stats ---
     const now = new Date();
     const startOfWeek = new Date(now);
@@ -252,6 +300,8 @@ module.exports = async function handler(req, res) {
       byPeriod,
       monthlyStats,
       equityCurve,
+      symbolSummary,
+      positionBreakdown,
     });
   } catch (err) {
     console.error(err);

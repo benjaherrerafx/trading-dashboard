@@ -290,6 +290,244 @@
     .table-scroll::-webkit-scrollbar-track { background: transparent; }
     .table-scroll::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
 
+    /* ── SECTION DIVIDER ── */
+    .section-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 24px 0 16px;
+    }
+
+    .section-divider span {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-3);
+      white-space: nowrap;
+    }
+
+    .section-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── SYMBOL KPI CARDS ── */
+    .sym-kpi-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-3);
+      margin-bottom: 10px;
+    }
+
+    .sym-kpi-symbol {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-1);
+      margin-bottom: 4px;
+    }
+
+    .sym-kpi-val {
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .sym-kpi-val.pos { color: var(--green); }
+    .sym-kpi-val.neg { color: var(--red); }
+
+    .sym-kpi-count {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text-1);
+      line-height: 1;
+    }
+
+    /* ── WIN/LOSS BARS ── */
+    .wl-row {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .wl-item { display: flex; flex-direction: column; gap: 6px; }
+
+    .wl-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .wl-name {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-2);
+    }
+
+    .wl-amount {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .wl-track {
+      height: 8px;
+      background: var(--surface-2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .wl-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+
+    /* ── ANALYSIS CARD ── */
+    .analysis-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-3);
+      margin-bottom: 14px;
+    }
+
+    .analysis-wr {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+    }
+
+    .analysis-wr-pct {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-1);
+    }
+
+    .analysis-wr-label {
+      font-size: 0.65rem;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    .progress-track {
+      height: 5px;
+      background: var(--surface-2);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    .analysis-counts {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .analysis-cnt {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-2);
+    }
+
+    .dot-w { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+    .dot-l { width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
+    .dot-b { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+
+    .analysis-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .astat { display: flex; flex-direction: column; gap: 2px; }
+
+    .astat-label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-3);
+    }
+
+    .astat-val {
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    /* ── LONG/SHORT RATIO ── */
+    .ls-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .ls-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .ls-label.long  { color: var(--green); }
+    .ls-label.short { color: var(--red); }
+
+    .ls-bar-track {
+      height: 10px;
+      border-radius: 5px;
+      overflow: hidden;
+      display: flex;
+      margin-bottom: 10px;
+    }
+
+    .ls-bar-long  { background: var(--green); transition: width 0.4s ease; }
+    .ls-bar-short { background: var(--red);   transition: width 0.4s ease; flex: 1; }
+
+    .ls-stats {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .ls-stat { display: flex; flex-direction: column; gap: 3px; }
+
+    .ls-stat-pct {
+      font-size: 1.6rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .ls-stat-pct.long  { color: var(--green); }
+    .ls-stat-pct.short { color: var(--red); }
+
+    .ls-stat-sub {
+      font-size: 0.68rem;
+      color: var(--text-3);
+    }
+
+    .ls-divider {
+      width: 1px;
+      background: var(--border);
+      align-self: stretch;
+    }
+
     /* ── STATES ── */
     #error-banner {
       background: rgba(239,68,68,0.08);
@@ -424,6 +662,41 @@
           </table>
         </div>
       </div>
+    </div>
+
+    <!-- ══ PERFORMANCE BREAKDOWN ══ -->
+    <div class="section-divider"><span>Performance Breakdown</span></div>
+
+    <!-- 5 Symbol KPI Cards -->
+    <div class="row" style="grid-template-columns: repeat(5,1fr); margin-bottom:14px" id="symbolKpis"></div>
+
+    <!-- Largest Win/Loss · Long Analysis · Short Analysis · L/S Ratio -->
+    <div class="row" style="grid-template-columns: 1fr 1fr 1fr 1fr">
+
+      <!-- Largest Win vs Loss -->
+      <div class="card" id="cardWinLoss">
+        <div class="card-header"><h2>Largest Win vs Loss</h2></div>
+        <div class="wl-row" id="wlRows"></div>
+      </div>
+
+      <!-- Long Analysis -->
+      <div class="card" id="cardLong">
+        <div class="analysis-label">Long Analysis</div>
+        <div id="longContent"></div>
+      </div>
+
+      <!-- Short Analysis -->
+      <div class="card" id="cardShort">
+        <div class="analysis-label">Short Analysis</div>
+        <div id="shortContent"></div>
+      </div>
+
+      <!-- Long/Short Ratio -->
+      <div class="card" id="cardLSRatio">
+        <div class="card-header"><h2>Long / Short Ratio</h2></div>
+        <div id="lsRatio"></div>
+      </div>
+
     </div>
 
     <!-- SESSION / DAY / POSITION -->
@@ -784,6 +1057,122 @@
       }).join('');
     }
 
+    /* ── PERFORMANCE BREAKDOWN ── */
+    function analysisHTML(p) {
+      const wrPct = p.total > 0 ? p.winRate : 0;
+      return `
+        <div class="analysis-wr">
+          <div class="analysis-wr-pct">${p.total > 0 ? wrPct + '%' : '—'}</div>
+          <div class="analysis-wr-label">Win Rate</div>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:${wrPct}%"></div>
+        </div>
+        <div class="analysis-counts">
+          <div class="analysis-cnt"><div class="dot-w"></div> ${p.wins} Wins</div>
+          <div class="analysis-cnt"><div class="dot-l"></div> ${p.losses} Losses</div>
+          <div class="analysis-cnt"><div class="dot-b"></div> ${p.breakEvens} BE</div>
+        </div>
+        <div class="analysis-stats">
+          <div class="astat">
+            <div class="astat-label">Total P&L</div>
+            <div class="astat-val ${p.totalPnL >= 0 ? 'pnl-pos' : 'pnl-neg'}">${fmt(p.totalPnL)}</div>
+          </div>
+          <div class="astat">
+            <div class="astat-label">Trades</div>
+            <div class="astat-val val-dim">${p.total}</div>
+          </div>
+          <div class="astat">
+            <div class="astat-label">Avg Win</div>
+            <div class="astat-val pnl-pos">${p.avgWin !== 0 ? fmt(p.avgWin) : '—'}</div>
+          </div>
+          <div class="astat">
+            <div class="astat-label">Avg Loss</div>
+            <div class="astat-val pnl-neg">${p.avgLoss !== 0 ? fmt(p.avgLoss) : '—'}</div>
+          </div>
+        </div>`;
+    }
+
+    function renderBreakdown({ symbolSummary, positionBreakdown, stats }) {
+      // ── 5 Symbol KPI Cards ──
+      const kpiDefs = [
+        { label: 'Best Symbol (Total)',  s: symbolSummary.bestSum,  key: 'totalPnL' },
+        { label: 'Worst Symbol (Total)', s: symbolSummary.worstSum, key: 'totalPnL' },
+        { label: 'Best Symbol (Avg)',    s: symbolSummary.bestAvg,  key: 'avgPnL' },
+        { label: 'Worst Symbol (Avg)',   s: symbolSummary.worstAvg, key: 'avgPnL' },
+      ];
+
+      const kpiCards = kpiDefs.map(({ label, s, key }) => {
+        if (!s) return `<div class="card"><div class="sym-kpi-label">${label}</div><div class="sym-kpi-val val-dim">—</div></div>`;
+        const val = s[key];
+        return `
+          <div class="card">
+            <div class="sym-kpi-label">${label}</div>
+            <div class="sym-kpi-symbol">${s.symbol}</div>
+            <div class="sym-kpi-val ${val >= 0 ? 'pos' : 'neg'}">${fmt(val)}</div>
+          </div>`;
+      });
+
+      kpiCards.push(`
+        <div class="card" style="display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">
+          <div class="sym-kpi-label">Symbols Traded</div>
+          <div class="sym-kpi-count">${symbolSummary.count}</div>
+        </div>`);
+
+      document.getElementById('symbolKpis').innerHTML = kpiCards.join('');
+
+      // ── Largest Win vs Loss ──
+      const maxAbs = Math.max(Math.abs(stats.bestTrade), Math.abs(stats.worstTrade)) || 1;
+      const winW   = (Math.abs(stats.bestTrade)  / maxAbs * 100).toFixed(1);
+      const lossW  = (Math.abs(stats.worstTrade) / maxAbs * 100).toFixed(1);
+
+      document.getElementById('wlRows').innerHTML = `
+        <div class="wl-item">
+          <div class="wl-meta">
+            <span class="wl-name">Largest Win</span>
+            <span class="wl-amount pnl-pos">${fmt(stats.bestTrade)}</span>
+          </div>
+          <div class="wl-track"><div class="wl-fill" style="width:${winW}%;background:var(--green)"></div></div>
+        </div>
+        <div class="wl-item">
+          <div class="wl-meta">
+            <span class="wl-name">Largest Loss</span>
+            <span class="wl-amount pnl-neg">${fmt(stats.worstTrade)}</span>
+          </div>
+          <div class="wl-track"><div class="wl-fill" style="width:${lossW}%;background:var(--red)"></div></div>
+        </div>`;
+
+      // ── Long & Short Analysis ──
+      document.getElementById('longContent').innerHTML  = analysisHTML(positionBreakdown.long);
+      document.getElementById('shortContent').innerHTML = analysisHTML(positionBreakdown.short);
+
+      // ── Long/Short Ratio ──
+      const total    = positionBreakdown.longCount + positionBreakdown.shortCount || 1;
+      const longPct  = ((positionBreakdown.longCount  / total) * 100).toFixed(1);
+      const shortPct = ((positionBreakdown.shortCount / total) * 100).toFixed(1);
+
+      document.getElementById('lsRatio').innerHTML = `
+        <div class="ls-labels">
+          <span class="ls-label long">Long</span>
+          <span class="ls-label short">Short</span>
+        </div>
+        <div class="ls-bar-track">
+          <div class="ls-bar-long"  style="width:${longPct}%"></div>
+          <div class="ls-bar-short" style="width:${shortPct}%"></div>
+        </div>
+        <div class="ls-stats">
+          <div class="ls-stat">
+            <div class="ls-stat-pct long">${longPct}%</div>
+            <div class="ls-stat-sub">${positionBreakdown.longCount} trades</div>
+          </div>
+          <div class="ls-divider"></div>
+          <div class="ls-stat" style="text-align:right">
+            <div class="ls-stat-pct short">${shortPct}%</div>
+            <div class="ls-stat-sub">${positionBreakdown.shortCount} trades</div>
+          </div>
+        </div>`;
+    }
+
     /* ── TIMEFRAME WIRING ── */
     function wireTf(containerId, callback) {
       document.getElementById(containerId).addEventListener('click', e => {
@@ -802,7 +1191,8 @@
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        const { byPeriod, monthlyStats, equityCurve, bySession, byDay, byPosition, byEntryModel, byQuality } = data;
+        const { byPeriod, monthlyStats, equityCurve, bySession, byDay, byPosition, byEntryModel, byQuality,
+                symbolSummary, positionBreakdown, stats } = data;
 
         allEquity  = equityCurve;
         allMonthly = monthlyStats;
@@ -825,6 +1215,9 @@
 
         // Monthly table
         renderMonthly(monthlyStats);
+
+        // Performance Breakdown
+        renderBreakdown({ symbolSummary, positionBreakdown, stats });
 
         // Session
         const sessions = Object.entries(bySession);
