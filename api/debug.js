@@ -42,6 +42,21 @@ module.exports = async function handler(req, res) {
     },
   };
 
+  // Fetch outbound IP as seen by external servers (what Binance sees)
+  try {
+    const ipRes  = await fetch("https://api.ipify.org?format=json");
+    const ipJson = await ipRes.json();
+    report.outboundIP = ipJson.ip;
+  } catch (e) {
+    try {
+      // fallback
+      const ipRes2 = await fetch("https://ifconfig.me/ip");
+      report.outboundIP = (await ipRes2.text()).trim();
+    } catch {
+      report.outboundIP = "could not determine";
+    }
+  }
+
   if (!KEY || !SECRET) {
     report.error = "Cannot run API tests — env vars missing.";
     return res.status(200).json(report);
