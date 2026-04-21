@@ -12,17 +12,20 @@ function sign(secret, qs) {
   return crypto.createHmac("sha256", secret).update(qs).digest("hex");
 }
 
-async function probe(key, secret, base, path, params = {}) {
-  const p   = { ...params, timestamp: Date.now() };
-  const qs  = new URLSearchParams(p).toString();
-  const url = `${base}${path}?${qs}&signature=${sign(secret, qs)}`;
+// Raw fetch — returns status, headers, body text, and the exact URL called
+async function rawFetch(url, headers = {}) {
   try {
-    const res  = await fetch(url, { headers: { "X-MBX-APIKEY": key } });
+    const res  = await fetch(url, { headers });
     const text = await res.text();
-    let body;
-    try { body = text.trim() ? JSON.parse(text) : "(empty body)"; }
-    catch { body = text || "(empty body)"; }
-    return { httpStatus: res.status, bodyType: Array.isArray(body) ? "array" : typeof body, bodyLength: Array.isArray(body) ? body.length : undefined, body };
+    const resHeaders = {};
+    res.headers.forEach((v, k) => { resHeaders[k] = v; });
+    return {
+      ok:         res.ok,
+      httpStatus: res.status,
+      bodyRaw:    text || "(empty)",
+      bodyLength: text.length,
+      headers:    resHeaders,
+    };
   } catch (e) {
     return { httpStatus: "fetch_error", error: e.message };
   }
@@ -42,68 +45,98 @@ module.exports = async function handler(req, res) {
     },
   };
 
-  // Fetch outbound IP as seen by external servers (what Binance sees)
+  // ── 1. Outbound IP ──────────────────────────────────────────────────────────
   try {
-    const ipRes  = await fetch("https://api.ipify.org?format=json");
-    const ipJson = await ipRes.json();
-    report.outboundIP = ipJson.ip;
-  } catch (e) {
+    const r = await fetch("https://api.ipify.org?format=json");
+    report.outboundIP = (await r.json()).ip;
+  } catch {
     try {
-      // fallback
-      const ipRes2 = await fetch("https://ifconfig.me/ip");
-      report.outboundIP = (await ipRes2.text()).trim();
+      const r = await fetch("https://ifconfig.me/ip");
+      report.outboundIP = (await r.text()).trim();
     } catch {
       report.outboundIP = "could not determine";
     }
   }
 
-  if (!KEY || !SECRET) {
-    report.error = "Cannot run API tests — env vars missing.";
-    return res.status(200).json(report);
-  }
+  // ── 2. Unauthenticated ping on every base URL ───────────────────────────────
+  // /fapi/v1/ping returns {} with 200 if the server is reachable — no key needed.
+  report.pingTests = {};
+  await Promise.all(
+    BASE_URLS.map(async base => {
+      const url    = `${base}/fapi/v1/ping`;
+      const result = await rawFetch(url);
+      report.pingTests[base] = {
+        url,
+        httpStatus: result.httpStatus,
+        bodyRaw:    result.bodyRaw,
+        reachable:  result.httpStatus === 200,
+        error:      result.error,
+      };
+    })
+  );
 
-  // Find first reachable base URL
-  let workingBase = null;
-  for (const base of BASE_URLS) {
-    const r = await probe(KEY, SECRET, base, "/fapi/v1/userTrades", { symbol: "BTCUSDT", limit: 1 });
-    if (r.httpStatus !== 451 && r.httpStatus !== "fetch_error") {
-      workingBase = base;
-      report.workingBase = base;
-      report.baseProbe   = r;
-      break;
-    }
-    report[`blocked_${base}`] = r.httpStatus;
-  }
+  // Pick first base that answered the ping
+  const workingBase = BASE_URLS.find(b => report.pingTests[b].reachable);
+  report.workingBase = workingBase || null;
 
   if (!workingBase) {
-    report.error = "All base URLs geo-blocked (451) from Vercel.";
+    report.error = "No base URL responded to /fapi/v1/ping. Server unreachable from Vercel.";
     return res.status(200).json(report);
   }
 
-  // Test both candidate endpoints side by side
-  const [userTrades, income] = await Promise.all([
-    probe(KEY, SECRET, workingBase, "/fapi/v1/userTrades", { symbol: "BTCUSDT", limit: 5 }),
-    probe(KEY, SECRET, workingBase, "/fapi/v1/income",     { incomeType: "REALIZED_PNL", limit: 5 }),
-  ]);
+  // ── 3. Authenticated request diagnostics ───────────────────────────────────
+  if (KEY && SECRET) {
+    const timestamp = Date.now();
+    const qs        = new URLSearchParams({ symbol: "BTCUSDT", limit: "1", timestamp }).toString();
+    const signature = sign(SECRET, qs);
+    const authUrl   = `${workingBase}/fapi/v1/userTrades?${qs}&signature=${signature}`;
 
-  report.endpoints = {
-    "/fapi/v1/userTrades": {
-      ...userTrades,
-      verdict: userTrades.httpStatus === 200 && Array.isArray(userTrades.body) && userTrades.body.length > 0
-        ? "✓ returns data"
-        : userTrades.httpStatus === 200
-          ? "⚠ 200 but empty array (no trades for BTCUSDT, or no history)"
-          : `✗ status ${userTrades.httpStatus}`,
-    },
-    "/fapi/v1/income": {
-      ...income,
-      verdict: income.httpStatus === 200 && Array.isArray(income.body) && income.body.length > 0
-        ? "✓ returns data"
-        : income.httpStatus === 200
-          ? "⚠ 200 but empty array (no realized PnL found)"
-          : `✗ status ${income.httpStatus}`,
-    },
-  };
+    report.authDiagnostics = {
+      timestamp,
+      queryString:      qs,
+      signaturePreview: signature.slice(0, 12) + "...",
+      url:              authUrl.replace(KEY, "***API_KEY***"),
+      requestHeaders: {
+        "X-MBX-APIKEY": `${KEY.slice(0, 4)}...${KEY.slice(-4)} (length ${KEY.length})`,
+      },
+    };
+
+    const authResult = await rawFetch(authUrl, { "X-MBX-APIKEY": KEY });
+    report.authDiagnostics.response = {
+      httpStatus:     authResult.httpStatus,
+      bodyRaw:        authResult.bodyRaw,
+      responseHeaders: authResult.headers,
+    };
+
+    // ── 4. Same request WITHOUT auth header — to detect proxy stripping ──────
+    const noAuthResult = await rawFetch(
+      `${workingBase}/fapi/v1/userTrades?${qs}&signature=${signature}`
+    );
+    report.noAuthHeaderTest = {
+      note:       "Same URL, no X-MBX-APIKEY header — if response matches auth, a proxy may be stripping headers",
+      httpStatus: noAuthResult.httpStatus,
+      bodyRaw:    noAuthResult.bodyRaw,
+    };
+
+    // ── 5. Time sync check ────────────────────────────────────────────────────
+    // Binance rejects requests where |serverTime - timestamp| > 1000ms
+    try {
+      const timeRes  = await rawFetch(`${workingBase}/fapi/v1/time`);
+      const timeJson = JSON.parse(timeRes.bodyRaw);
+      const drift    = Math.abs(timeJson.serverTime - timestamp);
+      report.timeSyncCheck = {
+        serverTime:  timeJson.serverTime,
+        localTime:   timestamp,
+        driftMs:     drift,
+        ok:          drift < 1000,
+        note:        drift >= 1000 ? "⚠ Clock drift > 1000ms — Binance will reject signatures" : "✓ Within tolerance",
+      };
+    } catch (e) {
+      report.timeSyncCheck = { error: e.message };
+    }
+  } else {
+    report.authDiagnostics = "Skipped — env vars missing";
+  }
 
   return res.status(200).json(report);
 };
